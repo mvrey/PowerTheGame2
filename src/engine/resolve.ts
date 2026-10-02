@@ -49,20 +49,17 @@ function executeOrders(state: GameState, orders: Order[][], emit: Emit): void {
     (orders[player] ?? []).forEach((order, index) => {
       let error: OrderError | null = withinBudget(state, player, accepted, order) ? null : 'budget';
       let merged = false;
-      if (!error) {
-        accepted.push(order);
-        error = checkOrder(state, player, order);
-      }
-      if (!error && order.k === 'move' && state.armies[order.army].controller === MERC) {
+      if (!error) accepted.push(order);
+      if (!error && order.k === 'move' && state.armies[order.army]?.controller === MERC) {
         const key = mercKey(order);
+        const destKey = key + '>' + order.to;
+        const left = merc.quota.get(destKey) ?? 0;
         if (merc.cancelled.has(key)) error = 'cancelled';
-        else {
-          const destKey = key + '>' + order.to;
-          const left = merc.quota.get(destKey) ?? 0;
-          if (left > 0) merc.quota.set(destKey, left - 1);
-          else merged = true;
-        }
+        // An earlier player already gave this very order: the piece has moved, nothing more to do.
+        else if (left === 0) merged = true;
+        else merc.quota.set(destKey, left - 1);
       }
+      if (!error && !merged) error = checkOrder(state, player, order);
       if (!error) {
         if (!merged) applyOrder(state, order);
         if (order.k === 'launch') bump(state, player, 'missiles', 1);

@@ -1,6 +1,6 @@
 import { generalById } from '../ai/generals';
 import { makeRng, planSteps } from '../ai/planner';
-import { HQ, NODES, NUM_ARMIES, REACH, RESERVE } from '../engine/board';
+import { HQ, NODES, NUM_ARMIES, REACH, RESERVE, useMap } from '../engine/board';
 import {
   cloneState, livingArmies, mayCommand, newGame, ordersLeft, playerStrength, seatOrder, snapshot, withinBudget,
 } from '../engine/game';
@@ -14,7 +14,7 @@ import { TAUNTS, audio } from './audio';
 import { Arrow, BoardView, Mark } from './boardView';
 import { clear, h, wait } from './dom';
 import { ARMY_COLORS, IconName, chip } from './icons';
-import { armyName, errorText, nodeLabel, nodeName, pieceName, t } from './i18n';
+import { Key, armyName, errorText, nodeLabel, nodeName, pieceName, t } from './i18n';
 import { ModalHandle, closeAllModals, modal, toast } from './modal';
 import { Setup, clearSave, saveGame, SavedGame, settings } from './settings';
 
@@ -91,6 +91,7 @@ export class GameScreen {
 
   constructor(private app: AppApi, private setup: Setup, saved?: SavedGame) {
     this.state = saved ? saved.state : newGame(setup);
+    useMap(this.state.map);
     this.elapsedMs = saved?.elapsedMs ?? 0;
     this.log = saved?.log ?? [];
     this.me = this.state.players.findIndex((p) => p.kind === 'human');
@@ -103,6 +104,7 @@ export class GameScreen {
       label: nodeLabel,
     });
     this.boardWrap.append(this.board.root, this.bannerEl, this.popEl);
+    this.boardWrap.style.setProperty('--ratio', String(this.board.ratio));
     this.el = h('div.game', null,
       h('aside.left', null, this.cardsEl),
       h('main.center', null, this.boardWrap),
@@ -218,7 +220,7 @@ export class GameScreen {
   }
 
   private persist(): void {
-    saveGame({ v: 1, setup: this.setup, state: this.state, elapsedMs: this.elapsedMs, log: this.log.slice(-80) });
+    saveGame({ v: 2, setup: this.setup, state: this.state, elapsedMs: this.elapsedMs, log: this.log.slice(-80) });
   }
 
   private startAi(): void {
@@ -622,7 +624,8 @@ export class GameScreen {
         h('div', null, h('div.round-n', null, t('game.round', this.shownRound)), h('div.phase', null, this.phaseLabel)),
         orderClock,
         h('button.btn.small', { onclick: () => this.openPause(), title: 'Esc' }, '☰ ' + t('game.menu'))),
-      h('div.round-sub', null, h('span', null, t('game.referee', this.playerName(this.shownReferee))), gameClock),
+      h('div.round-sub', null,
+        h('span', null, `${t(('map.' + this.state.map) as Key)} · ${t('game.referee', this.playerName(this.shownReferee))}`), gameClock),
     );
   }
 

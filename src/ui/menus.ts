@@ -1,10 +1,13 @@
 import { GENERALS } from '../ai/generals';
+import { useMap } from '../engine/board';
 import { PlayerConfig } from '../engine/game';
+import { MAPS, mapById } from '../engine/maps';
 import { GROUP1, PIECES, PieceType } from '../engine/types';
 import { audio } from './audio';
+import { BoardView } from './boardView';
 import { clear, h } from './dom';
 import { ARMY_COLORS, chip } from './icons';
-import { Key, Lang, armyName, pieceName, setLang, t } from './i18n';
+import { Key, Lang, armyName, nodeLabel, pieceName, setLang, t } from './i18n';
 import { modal } from './modal';
 import { rulesContent } from './rules';
 import { Setup, loadGame, loadSetup, saveSettings, saveSetup, settings } from './settings';
@@ -40,7 +43,13 @@ interface Rival { general: string; level: number }
 
 export function setupScreen(app: MenuApi): HTMLElement {
   const last = loadSetup();
+  let map = mapById(last?.map).id;
   let mode: 2 | 3 | 4 = last?.mode ?? 4;
+  // One small board per map, drawn once.
+  const previews = new Map(MAPS.map((m) => {
+    useMap(m.id);
+    return [m.id, new BoardView({ click: () => {}, hover: () => {}, label: nodeLabel }).root] as const;
+  }));
   let color = last?.players.find((p) => p.kind === 'human')?.armies[0] ?? 3;
   const previous = last?.players.filter((p) => p.kind === 'ai') ?? [];
   const rivals: Rival[] = [0, 1, 2].map((i) => ({
@@ -64,7 +73,7 @@ export function setupScreen(app: MenuApi): HTMLElement {
       const general = GENERALS.find((g) => g.id === rivals[i].general) ?? GENERALS[i];
       players.push({ name: general.name, kind: 'ai', armies, general: general.id, level: rivals[i].level });
     });
-    return { mode, players, orderTimer, gameLimit };
+    return { map, mode, players, orderTimer, gameLimit };
   };
   const armies = (list: number[]) => list.map((a) =>
     h('span.army-tag', { style: `--fill:${ARMY_COLORS[a].fill};--ink:${ARMY_COLORS[a].ink}` }, armyName(a)));
@@ -94,6 +103,11 @@ export function setupScreen(app: MenuApi): HTMLElement {
 
     root.append(h('div.menu-box.setup', null,
       h('h2', null, t('setup.title')),
+      h('h3', null, t('setup.map')),
+      h('div.maps', null, ...MAPS.map((m) =>
+        h('button.map-card', { class: m.id === map ? 'on' : '', onclick: () => { map = m.id; render(); } },
+          previews.get(m.id)!, t(('map.' + m.id) as Key)))),
+      h('p.muted.map-text', null, t(('map.' + map + '.text') as Key)),
       h('h3', null, t('setup.players')),
       h('div.seg', null, ...([4, 3, 2] as const).map((m) =>
         h('button.btn', { class: m === mode ? 'on' : '', onclick: () => { mode = m; render(); } }, t(('setup.players.' + m) as Key)))),

@@ -120,3 +120,10 @@ Todas las fases completadas. Verificación realizada:
 - Recorrido de la interfaz con navegador automatizado (capturas revisadas): órdenes, canjes, Megamisil, Reserva, pausa, opciones, idiomas,
   guardado y continuación, eliminación del jugador, reloj de órdenes, límite de 2 horas, fin de partida, ventana estrecha.
 - Build de producción probado abriendo `dist/index.html` directamente (file://), con audio.
+
+## 7. Mapas (ampliación)
+
+El tablero ya no está fijo: `src/engine/maps.ts` define cada mapa como una rejilla de texto y de ahí
+se derivan el grafo, las tablas de movimiento, el dibujo y la IA. Mapas: Clásico, Continente, Anillo,
+Encrucijada y Archipiélago. `tests/maps.test.ts` comprueba en todos solidez, equidad entre ejércitos,
+conectividad y partidas completas de IA. Cómo añadir uno: ver `README.md`.

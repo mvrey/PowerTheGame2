@@ -1,4 +1,5 @@
-import { HQ, NUM_ARMIES, RESERVE } from './board';
+import { HQ, NUM_ARMIES, RESERVE, useMap } from './board';
+import { mapById } from './maps';
 import {
   GameState, MERC, NO_ORIGIN, ORDERS_PER_ARMY, Order, Piece, PieceType, PIECES, Player, Snapshot,
 } from './types';
@@ -12,6 +13,8 @@ export interface PlayerConfig {
 }
 
 export interface GameConfig {
+  /** Map id; the classic board when omitted. */
+  map?: string;
   mode: 2 | 3 | 4;
   players: PlayerConfig[];
 }
@@ -19,7 +22,10 @@ export interface GameConfig {
 const START: PieceType[] = ['S', 'S', 'T', 'T', 'F', 'F', 'D', 'D'];
 
 export function newGame(config: GameConfig): GameState {
+  const map = mapById(config.map).id;
+  useMap(map);
   const state: GameState = {
+    map,
     mode: config.mode,
     round: 1,
     referee: 0,

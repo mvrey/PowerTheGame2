@@ -1,4 +1,5 @@
 import './style.css';
+import { useMap } from './engine/board';
 import { audio } from './ui/audio';
 import { BoardView } from './ui/boardView';
 import { clear, h } from './ui/dom';
@@ -21,7 +22,8 @@ function leaveScreen(): void {
 
 function showMenuScreen(el: HTMLElement): void {
   leaveScreen();
-  // The empty board sits behind the menus.
+  // The empty classic board sits behind the menus.
+  useMap('classic');
   const board = new BoardView({ click: () => {}, hover: () => {}, label: nodeLabel });
   root.append(h('div.menu-backdrop', null, board.root), el);
 }

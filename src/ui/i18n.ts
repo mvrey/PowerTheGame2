@@ -24,10 +24,21 @@ const es = {
   'piece.M': 'Megamisil', 'piece.P': 'Power',
   'node.hq': 'CG {0}', 'node.island': 'Isla {0}', 'node.sea': 'Vía {0}', 'node.reserve': 'Reserva',
   'node.reserveOf': 'Reserva de {0}',
-  'isle.IN': 'N', 'isle.IE': 'E', 'isle.IS': 'S', 'isle.IW': 'O', 'isle.IX': 'X',
+  'isle.west': 'O',
   'label.hq': 'CG',
 
   'setup.title': 'Nueva partida',
+  'setup.map': 'Mapa',
+  'map.classic': 'Clásico',
+  'map.classic.text': 'El tablero original: cuatro territorios unidos por cinco islas.',
+  'map.continent': 'Continente',
+  'map.continent.text': 'Sin islas ni canales: los territorios comparten frontera y la guerra terrestre es fulminante.',
+  'map.ring': 'Anillo',
+  'map.ring.text': 'El clásico sin isla central: solo llegas por tierra a tus dos vecinos.',
+  'map.crossroads': 'Encrucijada',
+  'map.crossroads.text': 'Una única isla central para cruzar por tierra y cuatro vías marítimas que unen los cuarteles.',
+  'map.archipelago': 'Archipiélago',
+  'map.archipelago.text': 'Patrias pequeñas entre diecisiete islas: la infantería avanza a saltos y mandan barcos y aviones.',
   'setup.players': 'Jugadores',
   'setup.players.2': '2 · dos ejércitos por bando',
   'setup.players.3': '3 · con ejército mercenario',
@@ -195,10 +206,21 @@ const en: Record<keyof typeof es, string> = {
   'piece.M': 'Megamissile', 'piece.P': 'Power',
   'node.hq': '{0} HQ', 'node.island': 'Island {0}', 'node.sea': 'Sea lane {0}', 'node.reserve': 'Reserve',
   'node.reserveOf': "{0}'s Reserve",
-  'isle.IN': 'N', 'isle.IE': 'E', 'isle.IS': 'S', 'isle.IW': 'W', 'isle.IX': 'X',
+  'isle.west': 'W',
   'label.hq': 'HQ',
 
   'setup.title': 'New game',
+  'setup.map': 'Map',
+  'map.classic': 'Classic',
+  'map.classic.text': 'The original board: four territories joined by five islands.',
+  'map.continent': 'Mainland',
+  'map.continent.text': 'No islands and no channels: the territories share borders and the ground war is lightning fast.',
+  'map.ring': 'Ring',
+  'map.ring.text': 'The classic board without its central island: by land you only reach your two neighbours.',
+  'map.crossroads': 'Crossroads',
+  'map.crossroads.text': 'A single central island is the only land crossing, and four sea lanes run from HQ to HQ.',
+  'map.archipelago': 'Archipelago',
+  'map.archipelago.text': 'Small homelands among seventeen islands: infantry hops slowly while ships and planes rule.',
   'setup.players': 'Players',
   'setup.players.2': '2 · two armies per side',
   'setup.players.3': '3 · with a mercenary army',
@@ -363,6 +385,9 @@ export const armyName = (army: number) => t(('army.' + army) as Key);
 export const pieceName = (type: PieceType | 'P') => t(('piece.' + type) as Key);
 export const errorText = (error: OrderError) => t(('err.' + error) as Key);
 
+/** Islands are labelled by the text after their "I"; the west island follows the language. */
+const isleLabel = (id: string) => (id === 'IW' ? t('isle.west') : id.slice(1));
+
 /** Full name of a board space, e.g. "Rojo 4", "CG Azul", "Isla X", "Vía S3". */
 export function nodeName(node: number): string {
   if (node < 0) return t('node.reserve');
@@ -370,7 +395,7 @@ export function nodeName(node: number): string {
   switch (n.kind) {
     case 'sector': return `${armyName(n.army)} ${n.num}`;
     case 'hq': return t('node.hq', armyName(n.army));
-    case 'island': return t('node.island', t(('isle.' + n.id) as Key));
+    case 'island': return t('node.island', isleLabel(n.id));
     case 'sea': return t('node.sea', n.id);
   }
 }
@@ -381,7 +406,7 @@ export function nodeLabel(node: number): string {
   switch (n.kind) {
     case 'sector': return String(n.num);
     case 'hq': return t('label.hq');
-    case 'island': return t(('isle.' + n.id) as Key);
+    case 'island': return isleLabel(n.id);
     case 'sea': return n.id;
   }
 }

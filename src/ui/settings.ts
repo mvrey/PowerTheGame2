@@ -17,7 +17,7 @@ export interface Setup extends GameConfig {
 }
 
 export interface SavedGame {
-  v: 1;
+  v: 2;
   setup: Setup;
   state: GameState;
   elapsedMs: number;
@@ -58,7 +58,7 @@ export const saveSettings = () => write(SETTINGS_KEY, settings);
 
 export function loadGame(): SavedGame | null {
   const save = read<SavedGame>(SAVE_KEY);
-  return save && save.v === 1 && save.state && !save.state.over ? save : null;
+  return save && save.v === 2 && save.state && !save.state.over ? save : null;
 }
 export const saveGame = (save: SavedGame) => write(SAVE_KEY, save);
 export function clearSave(): void {

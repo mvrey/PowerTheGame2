@@ -86,6 +86,8 @@ export interface Strike {
 }
 
 export interface GameState {
+  /** Id of the map being played (see maps.ts). */
+  map: string;
   mode: 2 | 3 | 4;
   round: number;
   /** Player index of this round's referee. */

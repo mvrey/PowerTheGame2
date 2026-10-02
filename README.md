@@ -1,55 +1,119 @@
 # POWER
 
-Adaptación digital no oficial del juego de mesa **Power** (1981; edición Spear's Games de los 90)
-para jugar en el navegador contra 1–3 generales controlados por la IA.
+An unofficial digital adaptation of the board game **Power** (1981; Spear's Games edition of the
+90s), played in the browser against one to three AI generals.
 
-## Jugar
+Power is a strategy game with no dice. Every round all players write up to five orders in secret,
+the orders are carried out at once, and battles are settled by adding up the power of the pieces
+on each space. You win by walking infantry into every rival headquarters and taking its flag.
 
-- **Doble clic en `Jugar.bat`** (o abre `dist/index.html` en el navegador). No necesita servidor ni conexión.
-- Para desarrollo: `npm install` y `npm run dev`.
+## Play
 
-## Cómo se juega (resumen)
+- **Double-click `Jugar.bat`**, or open `dist/index.html` (or the root `index.html`) in a browser.
+  No server and no connection are needed.
+- For development: `npm install`, then `npm run dev`.
 
-Cada ronda todos escriben hasta 5 órdenes en secreto; después se ejecutan a la vez, se resuelven
-los combates por suma de poder (sin dados) y se cobra Power por ocupar territorio enemigo.
-Gana quien captura todas las banderas llevando infantería a los Cuarteles Generales rivales.
-El reglamento completo está dentro del juego, en **Cómo jugar**.
+The game is in Spanish and English (Options → Language). The full rules are inside the game,
+under **How to play**.
 
-Controles:
+### Controls
 
-| Acción | Cómo |
+| Action | How |
 |---|---|
-| Mover una pieza | Clic en la pieza, clic en el destino resaltado |
-| Sacar de la Reserva | Clic en la pieza en tu tarjeta |
-| Comprar / canjear / Megamisil | Botones de tu tarjeta o del menú de la casilla |
-| Quitar una orden | ✕ en la hoja, `Retroceso` o `Ctrl+Z` |
-| Ejecutar la ronda | Botón amarillo o `Intro` |
-| Cancelar selección / pausa | `Esc` (o clic derecho) |
-| Saltar la animación | `Espacio` |
+| Move a piece | Click the piece, then a highlighted destination |
+| Deploy from the Reserve | Click the piece on your army card |
+| Buy, trade up, build a Megamissile | Buttons on your card or in the space's pop-up |
+| Remove an order | ✕ on the order sheet, `Backspace` or `Ctrl+Z` |
+| Execute the round | Yellow button or `Enter` |
+| Cancel a selection / pause | `Esc` (or right click) |
+| Skip the animation | `Space` |
 
-Opciones de partida: 2, 3 (con ejército mercenario) o 4 jugadores, color, general rival
-(seis personalidades) y nivel (Recluta, Capitán, General), reloj de órdenes y límite de 2 horas.
-La partida se guarda sola al empezar cada ronda. Idiomas: español e inglés.
+### Game options
 
-## Reglas y supuestos
+- **Map**: five boards (see below).
+- **Players**: 4 (free for all), 3 (the fourth army is mercenary and anyone may order it about)
+  or 2 (two allied armies each).
+- **Rivals**: six generals with different temperaments, each at one of three levels
+  (Recruit, Captain, General).
+- **Clocks**: the official 3-minute order clock and 2-hour game limit, both optional.
 
-`PLAN.md` recoge las reglas implementadas y los nueve puntos donde el reglamento no es explícito
-y hubo que decidir (por ejemplo, que los Megamisiles detonan cuando todos han movido).
+The game saves itself at the start of every round.
 
-## Código
+## Maps
+
+| Map | What changes |
+|---|---|
+| **Classic** | The original board: four territories joined by five islands. |
+| **Mainland** | No islands and no channels. Territories share land borders, so tanks cross in one move and the war is fast. Ships are confined to the rim. |
+| **Ring** | The classic board without its central island. By land you only reach your two neighbours; the army opposite is far away. |
+| **Crossroads** | A single central island is the only land crossing, while four long sea lanes run from HQ to HQ: a destroyer reaches a neighbouring HQ in two moves. |
+| **Archipelago** | Small four-sector homelands among seventeen islands. Ground forces must stop on every island, so crossing takes four rounds and ships and planes decide the war. |
+
+Every map is checked by tests to be fair (all four armies see the same distances to their
+neighbours and have the same amount of land) and fully connected for every kind of unit.
+
+### Adding a map
+
+Maps are plain text grids in `src/engine/maps.ts`. Each cell names the space it belongs to:
+
+| Cell | Meaning |
+|---|---|
+| `G4` `B0` `Y7` `R2` | Sector of the Green / Blue / Yellow / Red territory, with its number |
+| `HQG` `HQB` `HQY` `HQR` | Headquarters of an army |
+| `IN` `IX` `IA` … | Island (the text after `I` is its label) |
+| `S1` `S2` … | Sea lane |
+| `.` | Nothing: no piece can ever be there |
+
+```ts
+{
+  id: 'mymap',
+  rows: [
+    'HQG S1  S1  S1  S2  S2  S2  HQB',
+    'S8  G8  G6  G3  B5  B7  B8  S3',
+    // ...
+  ],
+}
+```
+
+- A name repeated on several cells makes one bigger space (sea lanes usually are).
+- Spaces are adjacent when their cells touch, diagonals included, except that two sea lanes
+  never connect: ships must pass through a coast, an island or an HQ.
+- Sectors that touch no sea lane are inland, and ships cannot enter them.
+- Every map needs the four armies, each with an HQ next to one of its sectors.
+- Rows and columns without sectors are drawn narrower; `cols` and `heights` override the sizes.
+
+Then add its name and description to `src/ui/i18n.ts` (`map.mymap`, `map.mymap.text`, in both
+languages). The board drawing, the movement tables and the AI all derive from the grid, and
+`tests/maps.test.ts` automatically checks the new map for soundness, fairness and full AI games.
+
+## Rules and assumptions
+
+`PLAN.md` lists the rules as implemented and the nine points where the rulebook is not explicit
+and a decision had to be made (for example, Megamissiles detonate once everyone has moved).
+
+## How the AI works
+
+All players move at once, so there is no turn tree to search. Each AI builds several candidate
+plans out of small tactics (defend the HQ, attack a space with just enough force, occupy enemy
+land for income, trade up, march infantry on a flag, and so on), imagines several plans for each
+rival the same way, plays every candidate against every scenario with the real rules engine and
+keeps the plan with the best outcome. The level sets how many plans and scenarios it weighs; the
+general's temperament weights both the tactics and the evaluation. It looks one round ahead.
+
+## Code
 
 ```
-src/engine/   Reglas puras: tablero (grafo de 57 casillas), órdenes, resolución de ronda
-src/ai/       Análisis, evaluación, planificador por simulación y generales
-src/ui/       Interfaz: tablero SVG, pantalla de juego, menús, audio, idiomas, guardado
-tests/        Vitest: reglas, variantes y partidas completas IA contra IA
-tools/        selfplay.ts (diagnóstico de la IA), render-midi.cjs (MIDI a WAV)
-Audio/        Recursos originales (WAV y MIDI)
-public/audio/ Los mismos, convertidos a MP3 para el navegador
+src/engine/   Pure rules: maps, board graph, orders, round resolution
+src/ai/       Board analysis, position evaluation, planner, generals
+src/ui/       Interface: SVG board, game screen, menus, audio, languages, saving
+tests/        Vitest: rules, variants, maps, full AI-versus-AI games
+tools/        selfplay.ts (AI diagnostics), render-midi.cjs (MIDI to WAV)
+Audio/        Original assets (WAV and MIDI)
+public/audio/ The same, converted to MP3 for the browser
 ```
 
-Comandos: `npm test`, `npm run build`, `npx vite-node tools/selfplay.ts 4 10 2222`.
-Añadir `#autoplay` a la URL hace que una IA juegue tu asiento (útil para depurar).
+Commands: `npm test`, `npm run build`, `npx vite-node tools/selfplay.ts 4 10 2222`.
+Adding `#autoplay` to the URL makes an AI play your seat, which is handy for debugging.
 
-La música se generó renderizando los MIDI con `js-synthesizer` y la fuente GeneralUser GS, y
-codificando con ffmpeg; `tools/render-midi.cjs` necesita ambos instalados aparte.
+The music was produced by rendering the MIDI files with `js-synthesizer` and the GeneralUser GS
+soundfont and encoding with ffmpeg; `tools/render-midi.cjs` needs both installed separately.
