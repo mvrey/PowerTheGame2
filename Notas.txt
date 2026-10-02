@@ -1,0 +1,85 @@
+Power: The Game
+https://www.mobygames.com/game/78106/power-the-game/
+
+Hacer GDD con imágenes para no perder el enfoque una vez se comience a desarrollar
+Hacer Trello con estimaciones de tiempo. Organizarse en sprints y respetar plazos.
+
+Ejecutable en navegador
+Realizado con tecnologías web modernas o alternativas (NO Unity)
+Docker
+Flujo completo y publicación en su propio dominio con su propia web
+Multiplayer
+Uso de editores con agentes IA (cursor/copilot)
+Obtener sprites que representen el tablero y las piezas del juego de mesa
+Feedback de vfx y sfx
+IA con niveles de dificultad, o con distintos comportamientos o estrategias
+Varios mapas (variantes del mapa principal)?
+Cheats?
+Plan de marketing / PR (darlo a conocer)
+
+
+DISEÑO
+-----------
+Menú de selección de color, posición en el mapa y equipos (Age of empires style)
+chat online
+
+	Pantallas y menús
+	
+		Splash con logo?
+		Presentación o video?
+		Menú principal (con imagen de fondo y CTA a otros juegos o perfil)
+			Tutorial
+			Opciones
+				Volumen sfx y música
+			Nuevo juego
+				Elegir mapa, colores y equipos
+			Listado de partidas online (crear / unirse)
+			Multijugador
+				Idem con chat.
+			Cargar Juego (solo single player)
+			Créditos
+			Salir
+			
+	Juego
+	
+	Pantalla de game over con estadísticas
+	
+		
+
+ARTE
+-----------
+	Logo mvrey?
+	Intro?
+	Fuente botones
+	Fuente menús
+	Fuente chat
+	Botones menú (idle, bloquedo y seleccionado)
+	Background menú
+	Slider opciones
+	New game / Multiplayer:
+		4 botones de colores
+		Dropdowns
+		Miniaturas de mapas
+		Miniaturas de oponentes
+		Borde ventana de chat
+		Fondo ventana de chat
+		Imagen de check (para botón "I'm ready
+		
+	Juego:
+		Imagen de mapa completo con casillas delimitadas. Todo en una sola imagen. (en programación debe poder expandirse a otros mapas con otras casillas)
+		Imágenes para unidades (destructor, infantería, tanque, caza, crucero, regimiento, tanque gordo, bombardero, bomba, power unit, bandera). En 4 colores por cada tipo de unidad.
+		Animación de movimiento de cada unidad (4 colores).
+		Overlay de unidad seleccionada
+		Flechas de 4 colores para indicar camino de unidad
+		Indicador de jugador pensando
+		Animaciones para cada uno de los generales?
+		Animación o efectos de batalla
+		Animación o efectos de lanzar e impactar ICBM
+		Animación o efectos de capturar bandera
+		
+
+PROGRAMACIÓN
+-----------
+
+AUDIO
+-----------

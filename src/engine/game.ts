@@ -1,0 +1,137 @@
+import { HQ, NUM_ARMIES, RESERVE } from './board';
+import {
+  GameState, MERC, NO_ORIGIN, ORDERS_PER_ARMY, Order, Piece, PieceType, PIECES, Player, Snapshot,
+} from './types';
+
+export interface PlayerConfig {
+  name: string;
+  kind: 'human' | 'ai';
+  armies: number[];
+  general?: string;
+  level?: number;
+}
+
+export interface GameConfig {
+  mode: 2 | 3 | 4;
+  players: PlayerConfig[];
+}
+
+const START: PieceType[] = ['S', 'S', 'T', 'T', 'F', 'F', 'D', 'D'];
+
+export function newGame(config: GameConfig): GameState {
+  const state: GameState = {
+    mode: config.mode,
+    round: 1,
+    referee: 0,
+    armies: [],
+    players: config.players.map((p, id): Player => ({
+      id,
+      name: p.name,
+      kind: p.kind,
+      armies: [...p.armies].sort((a, b) => a - b),
+      alive: true,
+      general: p.general,
+      level: p.level,
+      stats: { captured: 0, lost: 0, battlesWon: 0, flags: 0, missiles: 0, income: 0 },
+    })),
+    pieces: [],
+    nextId: 1,
+    strikes: [],
+    over: false,
+    winners: [],
+    endReason: null,
+  };
+  for (let a = 0; a < NUM_ARMIES; a++) {
+    const owner = state.players.find((p) => p.armies.includes(a));
+    state.armies.push({ id: a, controller: owner ? owner.id : MERC, alive: true, power: 0, flags: [a] });
+    for (const type of START) addPiece(state, type, a, HQ[a]);
+  }
+  state.referee = seatOrder(state)[0];
+  return state;
+}
+
+export function addPiece(state: GameState, type: PieceType, army: number, loc: number): Piece {
+  const piece: Piece = { id: state.nextId++, type, army, loc, moved: false, fresh: false, from: NO_ORIGIN, bounced: false };
+  state.pieces.push(piece);
+  return piece;
+}
+
+export function cloneState(state: GameState): GameState {
+  return {
+    ...state,
+    armies: state.armies.map((a) => ({ ...a, flags: [...a.flags] })),
+    players: state.players.map((p) => ({ ...p, stats: { ...p.stats } })),
+    pieces: state.pieces.map((p) => ({ ...p })),
+    strikes: state.strikes.map((s) => ({ ...s })),
+    winners: [...state.winners],
+  };
+}
+
+export function snapshot(state: GameState): Snapshot {
+  return {
+    pieces: state.pieces.map((p) => ({ id: p.id, type: p.type, army: p.army, loc: p.loc })),
+    power: state.armies.map((a) => a.power),
+    alive: state.armies.map((a) => a.alive),
+    flags: state.armies.map((a) => [...a.flags]),
+  };
+}
+
+/** Team of an army: its controlling player, or MERC. Allied armies share a team. */
+export function teamOf(state: GameState, army: number): number {
+  return state.armies[army].controller;
+}
+
+/** Living players in clockwise seat order. */
+export function seatOrder(state: GameState): number[] {
+  const seen: number[] = [];
+  for (const army of state.armies) {
+    const c = army.controller;
+    if (c !== MERC && state.players[c].alive && !seen.includes(c)) seen.push(c);
+  }
+  return seen;
+}
+
+/** Living armies a player controls. */
+export function livingArmies(state: GameState, player: number): number[] {
+  return state.players[player].armies.filter((a) => state.armies[a].alive);
+}
+
+export function mayCommand(state: GameState, player: number, army: number): boolean {
+  const c = state.armies[army].controller;
+  return c === player || c === MERC;
+}
+
+/** Whether `order` fits in the player's remaining order allowance given `prior` orders. */
+export function withinBudget(state: GameState, player: number, prior: Order[], order: Order): boolean {
+  const own = livingArmies(state, player);
+  if (prior.length >= own.length * ORDERS_PER_ARMY) return false;
+  if (state.armies[order.army].controller === MERC) return true;
+  return prior.filter((o) => o.army === order.army).length < ORDERS_PER_ARMY;
+}
+
+export function ordersLeft(state: GameState, player: number, prior: Order[], army: number): number {
+  const total = livingArmies(state, player).length * ORDERS_PER_ARMY - prior.length;
+  if (state.armies[army].controller === MERC) return Math.max(0, total);
+  return Math.max(0, Math.min(total, ORDERS_PER_ARMY - prior.filter((o) => o.army === army).length));
+}
+
+/** Combat strength of an army: pieces on the board and in the Reserve plus Power units. */
+export function armyStrength(state: GameState, army: number): number {
+  let total = state.armies[army].power;
+  for (const p of state.pieces) if (p.army === army) total += PIECES[p.type].power;
+  return total;
+}
+
+export function playerStrength(state: GameState, player: number): number {
+  return state.players[player].armies.reduce(
+    (sum, a) => sum + (state.armies[a].controller === player ? armyStrength(state, a) : 0), 0);
+}
+
+export function playerFlags(state: GameState, player: number): number {
+  return state.players[player].armies.reduce(
+    (sum, a) => sum + (state.armies[a].alive ? state.armies[a].flags.length : 0), 0);
+}
+
+export function reserveOf(state: GameState, army: number): Piece[] {
+  return state.pieces.filter((p) => p.army === army && p.loc === RESERVE);
+}
