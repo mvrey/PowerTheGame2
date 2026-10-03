@@ -1,5 +1,4 @@
-import { HQ, NUM_NODES, REACH, RESERVE } from '../engine/board';
-import { GameState, ORDERS_PER_ARMY, PieceType, PIECES } from '../engine/types';
+import { GameState, ORDERS_PER_ARMY, PIECES, PieceType, RESERVE, boardOf } from '../../api';
 
 /** What a piece is worth to the AI. A megamissile has no combat power but is far from worthless. */
 export const VALUE: Record<PieceType, number> = { S: 2, T: 3, F: 5, D: 10, R: 20, H: 30, B: 25, C: 50, M: 75 };
@@ -20,9 +19,10 @@ export interface Analysis {
 }
 
 export function analyse(state: GameState): Analysis {
+  const { hq, numNodes, reach } = boardOf(state);
   const sides = state.players.length + 1;
   const grid = <T>(make: () => T): T[][] =>
-    Array.from({ length: NUM_NODES }, () => Array.from({ length: sides }, make));
+    Array.from({ length: numNodes }, () => Array.from({ length: sides }, make));
   const power = grid(() => 0);
   const value = grid(() => 0);
   const inf = grid(() => false);
@@ -34,8 +34,8 @@ export function analyse(state: GameState): Analysis {
     const infantry = def.cls === 'inf';
     if (p.loc === RESERVE) {
       if (def.cls) {
-        arrivals[HQ[p.army]][side].push(def.power);
-        if (infantry) inf[HQ[p.army]][side] = true;
+        arrivals[hq[p.army]][side].push(def.power);
+        if (infantry) inf[hq[p.army]][side] = true;
       }
       continue;
     }
@@ -43,7 +43,7 @@ export function analyse(state: GameState): Analysis {
     value[p.loc][side] += VALUE[p.type];
     if (infantry) inf[p.loc][side] = true;
     if (!def.cls) continue;
-    for (const to of REACH[def.cls][p.loc]) {
+    for (const to of reach[def.cls][p.loc]) {
       arrivals[to][side].push(def.power);
       if (infantry) inf[to][side] = true;
     }

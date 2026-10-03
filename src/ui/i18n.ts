@@ -1,5 +1,4 @@
-import { NODES } from '../engine/board';
-import { OrderError, PieceType } from '../engine/types';
+import type { BoardNode, OrderError, PieceType } from '../api';
 
 export type Lang = 'es' | 'en';
 
@@ -130,7 +129,7 @@ const es = {
   'err.cantMove': 'no puede mover', 'err.unreachable': 'fuera de alcance', 'err.onlyHQ': 'solo al CG',
   'err.noPower': 'falta Power', 'err.badType': 'tipo inválido', 'err.needThree': 'faltan piezas',
   'err.tooWeak': 'menos de 100', 'err.badSpend': 'canje inválido', 'err.noMissile': 'sin misil',
-  'err.badTarget': 'objetivo inválido', 'err.budget': 'sin órdenes', 'err.cancelled': 'anulada por orden contraria',
+  'err.badTarget': 'objetivo inválido', 'err.budget': 'sin órdenes', 'err.cancelled': 'anulada por orden contraria', 'err.malformed': 'orden mal formada',
 
   'log.round': '— Ronda {0} —',
   'log.battle': '{0} vence en {1} ({2}) y captura {3}.',
@@ -177,12 +176,6 @@ const es = {
   'over.again': 'Revancha',
   'over.menu': 'Menú principal',
 
-  'gen.kruger': 'El Martillo: ataca sin descanso',
-  'gen.vega': 'La Zorra: acumula Power y espera su momento',
-  'gen.okoye': 'El Estratega: equilibrado en todo',
-  'gen.ivanova': 'Hielo: una fortaleza difícil de romper',
-  'gen.tanaka': 'El Oportunista: golpea donde hay botín',
-  'gen.dubois': 'El Audaz: arriesga para ganar rápido',
 };
 
 const en: Record<keyof typeof es, string> = {
@@ -312,7 +305,7 @@ const en: Record<keyof typeof es, string> = {
   'err.cantMove': 'cannot move', 'err.unreachable': 'out of range', 'err.onlyHQ': 'HQ only',
   'err.noPower': 'not enough Power', 'err.badType': 'invalid type', 'err.needThree': 'pieces missing',
   'err.tooWeak': 'under 100', 'err.badSpend': 'invalid trade', 'err.noMissile': 'no missile',
-  'err.badTarget': 'invalid target', 'err.budget': 'no orders left', 'err.cancelled': 'cancelled by a conflicting order',
+  'err.badTarget': 'invalid target', 'err.budget': 'no orders left', 'err.cancelled': 'cancelled by a conflicting order', 'err.malformed': 'malformed order',
 
   'log.round': '— Round {0} —',
   'log.battle': '{0} wins on {1} ({2}) and captures {3}.',
@@ -359,12 +352,6 @@ const en: Record<keyof typeof es, string> = {
   'over.again': 'Rematch',
   'over.menu': 'Main menu',
 
-  'gen.kruger': 'The Hammer: attacks relentlessly',
-  'gen.vega': 'The Fox: hoards Power and bides her time',
-  'gen.okoye': 'The Strategist: balanced in everything',
-  'gen.ivanova': 'Ice: a fortress that is hard to crack',
-  'gen.tanaka': 'The Opportunist: strikes where the loot is',
-  'gen.dubois': 'The Bold: takes risks to win fast',
 };
 
 export type Key = keyof typeof es;
@@ -389,9 +376,8 @@ export const errorText = (error: OrderError) => t(('err.' + error) as Key);
 const isleLabel = (id: string) => (id === 'IW' ? t('isle.west') : id.slice(1));
 
 /** Full name of a board space, e.g. "Rojo 4", "CG Azul", "Isla X", "Vía S3". */
-export function nodeName(node: number): string {
-  if (node < 0) return t('node.reserve');
-  const n = NODES[node];
+export function nodeName(n: BoardNode | undefined): string {
+  if (!n) return t('node.reserve');
   switch (n.kind) {
     case 'sector': return `${armyName(n.army)} ${n.num}`;
     case 'hq': return t('node.hq', armyName(n.army));
@@ -401,8 +387,7 @@ export function nodeName(node: number): string {
 }
 
 /** Short label printed on the board. */
-export function nodeLabel(node: number): string {
-  const n = NODES[node];
+export function nodeLabel(n: BoardNode): string {
   switch (n.kind) {
     case 'sector': return String(n.num);
     case 'hq': return t('label.hq');

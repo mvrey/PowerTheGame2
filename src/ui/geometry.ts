@@ -1,4 +1,4 @@
-import { GRID, MAP, NODES } from '../engine/board';
+import type { Board } from '../api';
 
 // Board drawing geometry, derived from the map grid. The longer side measures 1000 units.
 // Islands and HQs ("hubs") bulge out of their cell into the neighbouring ones, which is
@@ -32,16 +32,17 @@ export interface Layout {
 
 const WIDE = 122, NARROW = 92, BULGE = 60, SHORE = 22;
 
-const kindAt = (x: number, y: number) => {
-  const node = GRID[y]?.[x] ?? -1;
-  return node < 0 ? null : NODES[node].kind;
-};
-const isHub = (x: number, y: number) => {
-  const kind = kindAt(x, y);
-  return kind === 'island' || kind === 'hq';
-};
+function build(board: Board): Layout {
+  const { grid: GRID, def: MAP, nodes: NODES } = board;
+  const kindAt = (x: number, y: number) => {
+    const node = GRID[y]?.[x] ?? -1;
+    return node < 0 ? null : NODES[node].kind;
+  };
+  const isHub = (x: number, y: number) => {
+    const kind = kindAt(x, y);
+    return kind === 'island' || kind === 'hq';
+  };
 
-function build(): Layout {
   const rows = GRID.length, cols = GRID[0].length;
   const hasSector = (cells: number[]) => cells.some((n) => n >= 0 && NODES[n].kind === 'sector');
   const rawW = MAP.cols ?? Array.from({ length: cols }, (_, x) => (hasSector(GRID.map((row) => row[x])) ? WIDE : NARROW));
@@ -248,8 +249,8 @@ function toPath(loops: Point[][]): string {
 
 const cache = new Map<string, Layout>();
 
-/** Drawing geometry of the map in play. */
-export function layout(): Layout {
-  if (!cache.has(MAP.id)) cache.set(MAP.id, build());
-  return cache.get(MAP.id)!;
+/** Drawing geometry of a board, built once per map. */
+export function layout(board: Board): Layout {
+  if (!cache.has(board.def.id)) cache.set(board.def.id, build(board));
+  return cache.get(board.def.id)!;
 }

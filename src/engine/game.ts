@@ -1,4 +1,4 @@
-import { HQ, NUM_ARMIES, RESERVE, useMap } from './board';
+import { NUM_ARMIES, RESERVE, getBoard } from './board';
 import { mapById } from './maps';
 import {
   GameState, MERC, NO_ORIGIN, ORDERS_PER_ARMY, Order, Piece, PieceType, PIECES, Player, Snapshot,
@@ -6,10 +6,7 @@ import {
 
 export interface PlayerConfig {
   name: string;
-  kind: 'human' | 'ai';
   armies: number[];
-  general?: string;
-  level?: number;
 }
 
 export interface GameConfig {
@@ -23,7 +20,7 @@ const START: PieceType[] = ['S', 'S', 'T', 'T', 'F', 'F', 'D', 'D'];
 
 export function newGame(config: GameConfig): GameState {
   const map = mapById(config.map).id;
-  useMap(map);
+  const board = getBoard(map);
   const state: GameState = {
     map,
     mode: config.mode,
@@ -33,11 +30,8 @@ export function newGame(config: GameConfig): GameState {
     players: config.players.map((p, id): Player => ({
       id,
       name: p.name,
-      kind: p.kind,
       armies: [...p.armies].sort((a, b) => a - b),
       alive: true,
-      general: p.general,
-      level: p.level,
       stats: { captured: 0, lost: 0, battlesWon: 0, flags: 0, missiles: 0, income: 0 },
     })),
     pieces: [],
@@ -50,7 +44,7 @@ export function newGame(config: GameConfig): GameState {
   for (let a = 0; a < NUM_ARMIES; a++) {
     const owner = state.players.find((p) => p.armies.includes(a));
     state.armies.push({ id: a, controller: owner ? owner.id : MERC, alive: true, power: 0, flags: [a] });
-    for (const type of START) addPiece(state, type, a, HQ[a]);
+    for (const type of START) addPiece(state, type, a, board.hq[a]);
   }
   state.referee = seatOrder(state)[0];
   return state;
@@ -103,7 +97,7 @@ export function livingArmies(state: GameState, player: number): number[] {
 }
 
 export function mayCommand(state: GameState, player: number, army: number): boolean {
-  const c = state.armies[army].controller;
+  const c = state.armies[army]?.controller;
   return c === player || c === MERC;
 }
 
@@ -111,7 +105,7 @@ export function mayCommand(state: GameState, player: number, army: number): bool
 export function withinBudget(state: GameState, player: number, prior: Order[], order: Order): boolean {
   const own = livingArmies(state, player);
   if (prior.length >= own.length * ORDERS_PER_ARMY) return false;
-  if (state.armies[order.army].controller === MERC) return true;
+  if (state.armies[order.army]?.controller === MERC) return true;
   return prior.filter((o) => o.army === order.army).length < ORDERS_PER_ARMY;
 }
 

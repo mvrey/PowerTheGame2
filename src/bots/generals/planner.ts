@@ -1,28 +1,14 @@
-import { HQ, NODES, NUM_NODES, REACH, RESERVE, ROUNDS, TERRITORY, canReach } from '../engine/board';
-import { cloneState, livingArmies, ordersLeft, withinBudget } from '../engine/game';
-import { resolveRound } from '../engine/resolve';
-import { applyOrder, checkOrder, cheapestMissileSpend } from '../engine/rules';
-import { GROUP1, GameState, MERC, Order, Piece, PIECES, PieceType } from '../engine/types';
+import {
+  Board, Bot, BotContext, BotLevel, GROUP1, GameState, MERC, Order, OrderSheet, PIECES, Piece, PieceType, PlayerView,
+  RESERVE, Rng, boardOf, cheapestMissileSpend, livingArmies, simulate,
+} from '../../api';
 import { Analysis, VALUE, analyse, hostile } from './analysis';
 import { BALANCED, Style, evaluate } from './evaluate';
 
-export type Rng = () => number;
-
-export function makeRng(seed: number): Rng {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-export interface AiOptions {
-  level: 1 | 2 | 3;
-  style: Style;
-  rng: Rng;
-}
+// The generals' planner. All players move at once, so there is no turn tree to search: it builds
+// candidate plans out of small tactics ("macros"), imagines plans for each rival the same way,
+// plays every candidate against every scenario with the real rules (simulate) and keeps the
+// plan with the best outcome.
 
 /** Candidate plans weighed, rival scenarios each is played against, and randomness in the final pick. */
 const LEVELS = {
@@ -33,6 +19,7 @@ const LEVELS = {
 
 interface Ctx {
   state: GameState;
+  board: Board;
   me: number;
   side: number;
   an: Analysis;
@@ -43,43 +30,24 @@ interface Ctx {
   objective: number;
 }
 
-/** A plan under construction: the orders so far and the board as it would look after them. */
-class Draft {
-  w: GameState;
-  orders: Order[] = [];
-  constructor(private base: GameState, private me: number) {
-    this.w = cloneState(base);
-  }
-  add(order: Order): boolean {
-    if (!withinBudget(this.base, this.me, this.orders, order)) return false;
-    if (checkOrder(this.w, this.me, order)) return false;
-    applyOrder(this.w, order);
-    this.orders.push(order);
-    return true;
-  }
-  left(army: number): number {
-    return ordersLeft(this.base, this.me, this.orders, army);
-  }
-  get full(): boolean {
-    return livingArmies(this.base, this.me).every((a) => this.left(a) === 0);
-  }
-}
-
 const power = (p: Piece) => PIECES[p.type].power;
 const moveOrder = (p: Piece, to: number): Order => ({ k: 'move', army: p.army, type: p.type, from: p.loc, to });
 
 function mine(c: Ctx, p: Piece): boolean {
   return c.state.armies[p.army].controller === c.me;
 }
-function myPowerAt(c: Ctx, d: Draft, node: number): number {
+function myPowerAt(c: Ctx, d: OrderSheet, node: number): number {
   let total = 0;
-  for (const p of d.w.pieces) if (p.loc === node && mine(c, p)) total += power(p);
+  for (const p of d.preview.pieces) if (p.loc === node && mine(c, p)) total += power(p);
   return total;
 }
 /** My pieces on the board that can still be given a move order. */
-function movable(c: Ctx, d: Draft): Piece[] {
-  return d.w.pieces.filter(
+function movable(c: Ctx, d: OrderSheet): Piece[] {
+  return d.preview.pieces.filter(
     (p) => p.loc !== RESERVE && mine(c, p) && !p.moved && !p.fresh && PIECES[p.type].cls && d.left(p.army) > 0);
+}
+function canReach(c: Ctx, p: Piece, to: number): boolean {
+  return c.board.canReach(PIECES[p.type].cls!, p.loc, to);
 }
 function pick<T>(rng: Rng, items: T[], weight: (item: T) => number): T | undefined {
   let total = 0;
@@ -101,21 +69,21 @@ function shuffled<T>(rng: Rng, items: T[]): T[] {
   return out;
 }
 
-type Macro = (c: Ctx, d: Draft) => boolean;
+type Macro = (c: Ctx, d: OrderSheet) => boolean;
 
 /** Reinforce a threatened HQ from the Reserve, from nearby pieces or by buying. */
 const defend: Macro = (c, d) => {
   let added = false;
   for (const a of c.armies) {
-    const hq = HQ[a];
+    const hq = c.board.hq[a];
     const threat = hostile(c.an, c.an.pot, hq, c.side, true);
     if (!threat) continue;
     const goal = threat * (c.rng() < 0.5 ? 1 : 0.6);
     let have = myPowerAt(c, d, hq);
     if (have > goal) continue;
-    const helpers = d.w.pieces
+    const helpers = d.preview.pieces
       .filter((p) => mine(c, p) && !p.moved && !p.fresh && PIECES[p.type].cls
-        && (p.loc === RESERVE ? p.army === a : p.loc !== hq && canReach(PIECES[p.type].cls!, p.loc, hq)))
+        && (p.loc === RESERVE ? p.army === a : p.loc !== hq && canReach(c, p, hq)))
       .sort((x, y) => power(y) - power(x));
     for (const p of helpers) {
       if (have > goal) break;
@@ -124,7 +92,7 @@ const defend: Macro = (c, d) => {
         added = true;
       }
     }
-    const army = d.w.armies[a];
+    const army = d.preview.armies[a];
     while (have <= goal && army.power >= 2 && d.left(a) >= 2) {
       const type = (['D', 'F', 'T', 'S'] as PieceType[]).find((t) => PIECES[t].power <= army.power)!;
       if (!d.add({ k: 'buy', army: a, type }) || !d.add({ k: 'move', army: a, type, from: RESERVE, to: hq })) break;
@@ -139,8 +107,8 @@ const defend: Macro = (c, d) => {
 const attack: Macro = (c, d) => {
   const options: { node: number; force: Piece[]; weight: number }[] = [];
   const free = movable(c, d);
-  for (let node = 0; node < NUM_NODES; node++) {
-    const info = NODES[node];
+  for (let node = 0; node < c.board.numNodes; node++) {
+    const info = c.board.nodes[node];
     const flagHere = info.kind === 'hq' && c.state.armies[info.army].alive && c.state.armies[info.army].controller !== c.me;
     let loot = 0;
     for (let s = 0; s < c.an.sides; s++) if (s !== c.side) loot += c.an.value[node][s];
@@ -151,11 +119,11 @@ const attack: Macro = (c, d) => {
     const roll = c.rng();
     const margin = (roll < 0.4 ? 0 : roll < 0.75 ? 0.5 : 1) * reinforcements * Math.min(1, c.style.caution);
     const near = free
-      .filter((p) => p.loc !== node && canReach(PIECES[p.type].cls!, p.loc, node))
+      .filter((p) => p.loc !== node && canReach(c, p, node))
       .sort((x, y) => power(y) - power(x));
     const force: Piece[] = [];
     let total = myPowerAt(c, d, node);
-    let infantry = d.w.pieces.some((p) => p.loc === node && mine(c, p) && PIECES[p.type].cls === 'inf');
+    let infantry = d.preview.pieces.some((p) => p.loc === node && mine(c, p) && PIECES[p.type].cls === 'inf');
     if (flagHere && !infantry) {
       const soldier = near.find((p) => PIECES[p.type].cls === 'inf');
       if (soldier) {
@@ -200,12 +168,13 @@ const attack: Macro = (c, d) => {
 const income: Macro = (c, d) => {
   const targets = shuffled(c.rng, c.state.armies.filter((a) => a.alive && a.controller !== c.me).map((a) => a.id));
   const free = movable(c, d);
+  const { nodes } = c.board;
   for (const t of targets) {
-    if (d.w.pieces.some((p) => mine(c, p) && p.loc !== RESERVE && NODES[p.loc].kind === 'sector' && NODES[p.loc].army === t)) continue;
+    if (d.preview.pieces.some((p) => mine(c, p) && p.loc !== RESERVE && nodes[p.loc].kind === 'sector' && nodes[p.loc].army === t)) continue;
     let best: { p: Piece; to: number; score: number } | undefined;
     for (const p of free) {
-      for (const to of TERRITORY[t]) {
-        if (!canReach(PIECES[p.type].cls!, p.loc, to)) continue;
+      for (const to of c.board.territory[t]) {
+        if (!canReach(c, p, to)) continue;
         const strength = power(p) + myPowerAt(c, d, to);
         if (hostile(c.an, c.an.power, to, c.side) >= strength) continue;
         const safe = hostile(c.an, c.an.pot, to, c.side) <= strength;
@@ -229,29 +198,30 @@ const develop: Macro = (c, d) => {
     return true;
   };
   const count = (army: number, type: PieceType, loc: number) =>
-    d.w.pieces.filter((p) => p.army === army && p.type === type && p.loc === loc).length;
+    d.preview.pieces.filter((p) => p.army === army && p.type === type && p.loc === loc).length;
   const tradeUps = (army: number) => {
-    const spots = new Set(d.w.pieces.filter((p) => p.army === army).map((p) => p.loc));
+    const spots = new Set(d.preview.pieces.filter((p) => p.army === army).map((p) => p.loc));
     for (const loc of spots)
       for (const type of GROUP1) while (count(army, type, loc) >= 3 && add({ k: 'up', army, type, at: loc }));
   };
   for (const a of shuffled(c.rng, c.armies)) {
-    const army = d.w.armies[a];
+    const army = d.preview.armies[a];
+    const hq = c.board.hq[a];
     tradeUps(a);
     while (budget > 0 && army.power >= 2 && d.left(a) > 0) {
-      const close = (t: PieceType) => (count(a, t, RESERVE) % 3 === 2 || count(a, t, HQ[a]) === 2 ? 4 : 0);
+      const close = (t: PieceType) => (count(a, t, RESERVE) % 3 === 2 || count(a, t, hq) === 2 ? 4 : 0);
       const type = pick(c.rng, GROUP1.filter((t) => PIECES[t].power <= army.power), (t) =>
         t === 'S' || t === 'T' ? 3 + close(t) : t === 'F' ? 1.5 : 2)!;
       if (!add({ k: 'buy', army: a, type })) break;
       tradeUps(a);
     }
-    const waiting = d.w.pieces
+    const waiting = d.preview.pieces
       .filter((p) => p.army === a && p.loc === RESERVE && PIECES[p.type].cls)
       .sort((x, y) => power(y) - power(x));
     for (const p of waiting) {
       // Two of a kind may be worth holding back until a third can be bought.
       if (PIECES[p.type].group === 1 && count(a, p.type, RESERVE) === 2 && c.rng() < 0.6) continue;
-      if (!add(moveOrder(p, HQ[a]))) break;
+      if (!add(moveOrder(p, hq))) break;
     }
     tradeUps(a);
   }
@@ -264,12 +234,11 @@ const gather: Macro = (c, d) => {
   for (const a of shuffled(c.rng, c.armies)) {
     for (const type of shuffled(c.rng, GROUP1)) {
       const here = new Map<number, number>();
-      for (const p of d.w.pieces)
+      for (const p of d.preview.pieces)
         if (p.army === a && p.type === type && p.loc !== RESERVE) here.set(p.loc, (here.get(p.loc) ?? 0) + 1);
       for (const [node, n] of here) {
         if (n !== 2 || d.left(a) < 2) continue;
-        const third = free.find((p) => p.army === a && p.type === type && p.loc !== node
-          && canReach(PIECES[type].cls!, p.loc, node));
+        const third = free.find((p) => p.army === a && p.type === type && p.loc !== node && canReach(c, p, node));
         if (third && d.add(moveOrder(third, node))) {
           d.add({ k: 'up', army: a, type, at: node });
           return true;
@@ -282,17 +251,18 @@ const gather: Macro = (c, d) => {
 
 /** March towards the objective's HQ, keeping together and out of harm's way when possible. */
 const advance: Macro = (c, d) => {
-  const goal = HQ[c.objective];
+  const goal = c.board.hq[c.objective];
   const movers = movable(c, d).sort((x, y) => power(y) - power(x) + (c.rng() - 0.5) * 6);
   let quota = 1 + Math.floor(c.rng() * 3);
   let added = false;
   for (const p of movers) {
     if (quota <= 0) break;
     const cls = PIECES[p.type].cls!;
-    const now = ROUNDS[cls][p.loc][goal];
+    const rounds = c.board.rounds[cls];
+    const now = rounds[p.loc][goal];
     let best: { to: number; score: number } | undefined;
-    for (const to of REACH[cls][p.loc]) {
-      const then = ROUNDS[cls][to][goal];
+    for (const to of c.board.reach[cls][p.loc]) {
+      const then = rounds[to][goal];
       if (then >= now) continue;
       const strength = power(p) + myPowerAt(c, d, to);
       if (hostile(c.an, c.an.power, to, c.side) >= strength) continue;
@@ -310,15 +280,16 @@ const advance: Macro = (c, d) => {
 
 /** Walk infantry towards the objective's HQ: nothing else can take a flag. */
 const march: Macro = (c, d) => {
-  const goal = HQ[c.objective];
+  const goal = c.board.hq[c.objective];
+  const rounds = c.board.rounds.inf;
   const troops = movable(c, d)
     .filter((p) => PIECES[p.type].cls === 'inf')
-    .sort((x, y) => ROUNDS.inf[x.loc][goal] - ROUNDS.inf[y.loc][goal] || power(y) - power(x));
+    .sort((x, y) => rounds[x.loc][goal] - rounds[y.loc][goal] || power(y) - power(x));
   for (const p of troops.slice(0, 2)) {
-    const now = ROUNDS.inf[p.loc][goal];
+    const now = rounds[p.loc][goal];
     let best: { to: number; score: number } | undefined;
-    for (const to of REACH.inf[p.loc]) {
-      const then = ROUNDS.inf[to][goal];
+    for (const to of c.board.reach.inf[p.loc]) {
+      const then = rounds[to][goal];
       if (then >= now) continue;
       const strength = power(p) + myPowerAt(c, d, to);
       if (hostile(c.an, c.an.power, to, c.side) >= strength) continue;
@@ -334,15 +305,16 @@ const march: Macro = (c, d) => {
 /** Pull valuable pieces out of spaces the enemy could overpower. */
 const retreat: Macro = (c, d) => {
   let added = false;
+  const { nodes } = c.board;
   const free = movable(c, d).sort((x, y) => VALUE[y.type] - VALUE[x.type]);
   for (const p of free) {
-    if (NODES[p.loc].kind === 'hq' && c.armies.includes(NODES[p.loc].army)) continue;
+    if (nodes[p.loc].kind === 'hq' && c.armies.includes(nodes[p.loc].army)) continue;
     if (hostile(c.an, c.an.pot, p.loc, c.side) <= myPowerAt(c, d, p.loc)) continue;
     let best: { to: number; score: number } | undefined;
-    for (const to of REACH[PIECES[p.type].cls!][p.loc]) {
+    for (const to of c.board.reach[PIECES[p.type].cls!][p.loc]) {
       const strength = power(p) + myPowerAt(c, d, to);
       if (hostile(c.an, c.an.pot, to, c.side) > strength) continue;
-      const home = NODES[to].kind === 'hq' && c.armies.includes(NODES[to].army);
+      const home = nodes[to].kind === 'hq' && c.armies.includes(nodes[to].army);
       const score = (home ? 4 : 0) + Math.min(strength, 40) * 0.1 + c.rng() * 2;
       if (!best || score > best.score) best = { to, score };
     }
@@ -358,7 +330,7 @@ const retreat: Macro = (c, d) => {
 const missile: Macro = (c, d) => {
   for (const a of c.armies) {
     let best = { gain: 0, target: 0, targetArmy: -1 };
-    for (let node = 0; node < NUM_NODES; node++) {
+    for (let node = 0; node < c.board.numNodes; node++) {
       let gain = -2 * c.an.value[node][c.side];
       for (let s = 0; s < c.an.sides; s++) if (s !== c.side) gain += c.an.value[node][s] * (s === 0 ? 0.5 : 1);
       if (gain > best.gain) best = { gain, target: node, targetArmy: -1 };
@@ -369,17 +341,17 @@ const missile: Macro = (c, d) => {
       for (const p of c.state.pieces) if (p.army === enemy.id && p.loc === RESERVE) gain += VALUE[p.type];
       if (gain > best.gain) best = { gain, target: RESERVE, targetArmy: enemy.id };
     }
-    const ready = d.w.pieces.find((p) => p.army === a && p.type === 'M');
+    const ready = d.preview.pieces.find((p) => p.army === a && p.type === 'M');
     if (ready) {
       if (best.gain >= 30 && d.add({ k: 'launch', army: a, from: ready.loc, target: best.target, targetArmy: best.targetArmy }))
         return true;
       continue;
     }
     if (d.left(a) < 2) continue;
-    const spots = new Set(d.w.pieces.filter((p) => p.army === a && !(p.loc === HQ[a])).map((p) => p.loc));
+    const spots = new Set(d.preview.pieces.filter((p) => p.army === a && !(p.loc === c.board.hq[a])).map((p) => p.loc));
     spots.add(RESERVE);
     for (const loc of spots) {
-      const recipe = cheapestMissileSpend(d.w, a, loc);
+      const recipe = cheapestMissileSpend(d.preview, a, loc);
       if (!recipe || best.gain < recipe.total * 1.15) continue;
       if (d.add({ k: 'mk', army: a, at: loc, spend: recipe.spend, power: recipe.power })) {
         d.add({ k: 'launch', army: a, from: loc, target: best.target, targetArmy: best.targetArmy });
@@ -393,9 +365,9 @@ const missile: Macro = (c, d) => {
 /** Three-player game: walk a mercenary piece into one of my stronger stacks to capture it. */
 const hireMercenary: Macro = (c, d) => {
   let best: { p: Piece; to: number; score: number } | undefined;
-  for (const p of d.w.pieces) {
+  for (const p of d.preview.pieces) {
     if (c.state.armies[p.army].controller !== MERC || p.loc === RESERVE || p.moved || p.fresh || !PIECES[p.type].cls) continue;
-    for (const to of REACH[PIECES[p.type].cls!][p.loc]) {
+    for (const to of c.board.reach[PIECES[p.type].cls!][p.loc]) {
       const mineThere = myPowerAt(c, d, to);
       if (!mineThere) continue;
       let others = power(p);
@@ -409,25 +381,25 @@ const hireMercenary: Macro = (c, d) => {
 };
 
 /** Any legal order at all, so the plan is never empty (an empty plan costs a Power). */
-function fallback(c: Ctx, d: Draft): void {
+function fallback(c: Ctx, d: OrderSheet): void {
   for (const p of shuffled(c.rng, movable(c, d))) {
-    const options = REACH[PIECES[p.type].cls!][p.loc].filter(
+    const options = c.board.reach[PIECES[p.type].cls!][p.loc].filter(
       (to) => hostile(c.an, c.an.power, to, c.side) < power(p) + myPowerAt(c, d, to));
     const to = pick(c.rng, options, () => 1);
     if (to !== undefined && d.add(moveOrder(p, to))) return;
   }
   for (const a of c.armies) {
-    for (const p of d.w.pieces) if (p.army === a && p.loc === RESERVE && PIECES[p.type].cls && d.add(moveOrder(p, HQ[a]))) return;
+    for (const p of d.preview.pieces) if (p.army === a && p.loc === RESERVE && PIECES[p.type].cls && d.add(moveOrder(p, c.board.hq[a]))) return;
     for (const type of GROUP1) if (d.add({ k: 'buy', army: a, type })) return;
     for (const type of GROUP1)
-      for (const loc of new Set(d.w.pieces.filter((p) => p.army === a).map((p) => p.loc)))
+      for (const loc of new Set(d.preview.pieces.filter((p) => p.army === a).map((p) => p.loc)))
         if (d.add({ k: 'up', army: a, type, at: loc })) return;
   }
-  for (const p of movable(c, d)) for (const to of REACH[PIECES[p.type].cls!][p.loc]) if (d.add(moveOrder(p, to))) return;
+  for (const p of movable(c, d)) for (const to of c.board.reach[PIECES[p.type].cls!][p.loc]) if (d.add(moveOrder(p, to))) return;
 }
 
 function buildPlan(c: Ctx): Order[] {
-  const d = new Draft(c.state, c.me);
+  const d = new OrderSheet(c.state, c.me);
   const { aggression, caution, greed } = c.style;
   let macros: [Macro, number][] = [
     [attack, 3 * aggression], [income, 2.5 * greed], [develop, 2.5 * greed], [gather, 1.5],
@@ -439,87 +411,86 @@ function buildPlan(c: Ctx): Order[] {
     if (!entry[0](c, d)) macros = macros.filter((m) => m !== entry);
   }
   if (!d.orders.length) fallback(c, d);
-  return d.orders;
+  return [...d.orders];
 }
 
 function context(state: GameState, an: Analysis, me: number, style: Style, rng: Rng): Ctx | null {
   const armies = livingArmies(state, me);
   if (!armies.length) return null;
+  const board = boardOf(state);
   const enemies = state.armies.filter((a) => a.alive && a.controller !== me && a.controller !== MERC);
   const objective = pick(rng, enemies, (enemy) => {
     // Favour weak neighbours.
     let strength = enemy.power + 10;
     for (const p of state.pieces) if (p.army === enemy.id) strength += VALUE[p.type];
-    const distance = Math.min(...armies.map((a) => ROUNDS.air[HQ[a]][HQ[enemy.id]]));
+    const distance = Math.min(...armies.map((a) => board.rounds.air[board.hq[a]][board.hq[enemy.id]]));
     return 1000 / (strength * distance);
   });
-  return { state, me, side: me + 1, an, style, rng, armies, objective: objective ? objective.id : armies[0] };
+  return { state, board, me, side: me + 1, an, style, rng, armies, objective: objective ? objective.id : armies[0] };
 }
 
-/**
- * Chooses a player's orders. Written as a generator so the UI can spread the work over
- * several frames; each `yield` is a safe point to pause.
- */
-export function* planSteps(state: GameState, me: number, opts: AiOptions): Generator<void, Order[]> {
-  const level = LEVELS[opts.level];
+/** Chooses a player's orders. Awaits `checkpoint` between steps so the host stays responsive. */
+export async function plan(
+  state: GameState, me: number, level: BotLevel, style: Style, rng: Rng, checkpoint: () => Promise<void> = async () => {},
+): Promise<Order[]> {
+  const cfg = LEVELS[level];
   const an = analyse(state);
 
   const seen = new Set<string>();
   const plans: Order[][] = [];
-  for (let i = 0; i < level.plans; i++) {
-    const c = context(state, an, me, opts.style, opts.rng);
+  for (let i = 0; i < cfg.plans; i++) {
+    const c = context(state, an, me, style, rng);
     if (!c) return [];
-    const plan = buildPlan(c);
-    const key = JSON.stringify(plan);
+    const candidate = buildPlan(c);
+    const key = JSON.stringify(candidate);
     if (!seen.has(key)) {
       seen.add(key);
-      plans.push(plan);
+      plans.push(candidate);
     }
-    yield;
+    await checkpoint();
   }
   if (plans.length === 1) return plans[0];
 
   // What the rivals might do: plans built the same way, from their point of view.
   const rivals = state.players.filter((p) => p.alive && p.id !== me);
   const scenarios: Order[][][] = [];
-  for (let j = 0; j < level.scenarios; j++) {
+  for (let j = 0; j < cfg.scenarios; j++) {
     const scenario: Order[][] = state.players.map(() => []);
     for (const rival of rivals) {
-      const c = context(state, an, rival.id, BALANCED, opts.rng);
+      const c = context(state, an, rival.id, BALANCED, rng);
       if (c) scenario[rival.id] = buildPlan(c);
     }
     scenarios.push(scenario);
-    yield;
+    await checkpoint();
   }
 
-  const riskAversion = Math.min(0.5, 0.25 * opts.style.caution);
+  const riskAversion = Math.min(0.5, 0.25 * style.caution);
   let best = plans[0];
   let bestScore = -Infinity;
-  for (const plan of plans) {
+  for (const candidate of plans) {
     let sum = 0;
     let worst = Infinity;
     for (const scenario of scenarios) {
-      const sim = cloneState(state);
-      const orders = scenario.map((o, p) => (p === me ? plan : o));
-      resolveRound(sim, orders);
-      const value = evaluate(sim, me, opts.style);
+      const outcome = simulate(state, scenario.map((o, p) => (p === me ? candidate : o)));
+      const value = evaluate(outcome.state, me, style);
       sum += value;
       worst = Math.min(worst, value);
-      yield;
+      await checkpoint();
     }
-    const score = (sum / scenarios.length) * (1 - riskAversion) + worst * riskAversion + opts.rng() * level.noise;
+    const score = (sum / scenarios.length) * (1 - riskAversion) + worst * riskAversion + rng() * cfg.noise;
     if (score > bestScore) {
       bestScore = score;
-      best = plan;
+      best = candidate;
     }
   }
   return best;
 }
 
-export function planOrders(state: GameState, me: number, opts: AiOptions): Order[] {
-  const steps = planSteps(state, me, opts);
-  for (;;) {
-    const step = steps.next();
-    if (step.done) return step.value;
+/** A general: the planner with a temperament and a level. */
+export class PlannerBot implements Bot {
+  constructor(private readonly style: Style, private readonly level: BotLevel) {}
+
+  decide(view: PlayerView, ctx: BotContext): Promise<Order[]> {
+    return plan(view.state, view.me, this.level, this.style, ctx.rng, () => ctx.checkpoint());
   }
 }

@@ -1,5 +1,4 @@
-import { GameConfig } from '../engine/game';
-import { GameState } from '../engine/types';
+import type { BotLevel, GameState, PlayerConfig } from '../api';
 import { Lang } from './i18n';
 
 export interface Settings {
@@ -11,13 +10,24 @@ export interface Settings {
   hints: boolean;
 }
 
-export interface Setup extends GameConfig {
+/** Who sits in a seat: the person at this computer, or a bot from the registry. */
+export interface SeatConfig extends PlayerConfig {
+  kind: 'human' | 'ai';
+  /** Registry id of the bot playing an 'ai' seat. */
+  bot?: string;
+  level?: BotLevel;
+}
+
+export interface Setup {
+  map?: string;
+  mode: 2 | 3 | 4;
+  players: SeatConfig[];
   orderTimer: boolean;
   gameLimit: boolean;
 }
 
 export interface SavedGame {
-  v: 2;
+  v: 3;
   setup: Setup;
   state: GameState;
   elapsedMs: number;
@@ -56,9 +66,21 @@ function write(key: string, value: unknown): void {
 export const settings: Settings = { ...DEFAULTS, ...(read<Partial<Settings>>(SETTINGS_KEY) ?? {}) };
 export const saveSettings = () => write(SETTINGS_KEY, settings);
 
+/** Before version 3, AI seats named their general in `general` instead of `bot`. */
+function migrateSetup(setup: Setup | null): Setup | null {
+  if (!setup?.players) return setup;
+  for (const seat of setup.players as (SeatConfig & { general?: string })[]) {
+    if (seat.kind === 'ai' && !seat.bot && seat.general) seat.bot = seat.general;
+    delete seat.general;
+  }
+  return setup;
+}
+
 export function loadGame(): SavedGame | null {
-  const save = read<SavedGame>(SAVE_KEY);
-  return save && save.v === 2 && save.state && !save.state.over ? save : null;
+  const save = read<Omit<SavedGame, 'v'> & { v: number }>(SAVE_KEY);
+  if (!save || (save.v !== 2 && save.v !== 3) || !save.state || save.state.over) return null;
+  migrateSetup(save.setup);
+  return { ...save, v: 3 };
 }
 export const saveGame = (save: SavedGame) => write(SAVE_KEY, save);
 export function clearSave(): void {
@@ -69,5 +91,5 @@ export function clearSave(): void {
   }
 }
 
-export const loadSetup = () => read<Setup>(SETUP_KEY);
+export const loadSetup = () => migrateSetup(read<Setup>(SETUP_KEY));
 export const saveSetup = (setup: Setup) => write(SETUP_KEY, setup);

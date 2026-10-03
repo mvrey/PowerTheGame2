@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { ADJ, HQ, NODES, NODE_BY_ID as N, NUM_NODES, REACH, RESERVE, TERRITORY, canReach } from '../src/engine/board';
+import { RESERVE, getBoard } from '../src/engine/board';
 import { addPiece, armyStrength, newGame, reserveOf } from '../src/engine/game';
 import { resolveRound } from '../src/engine/resolve';
 import { applyOrder, checkOrder, cheapestMissileSpend } from '../src/engine/rules';
 import { GameState, Order, PieceType } from '../src/engine/types';
 
 const G = 0, B = 1, Y = 2, R = 3;
+const board = getBoard('classic');
+const { adj: ADJ, hq: HQ, nodes: NODES, byId: N, numNodes: NUM_NODES, reach: REACH, territory: TERRITORY } = board;
+const canReach = board.canReach;
 
 function game4(): GameState {
   return newGame({
     mode: 4,
-    players: [0, 1, 2, 3].map((a) => ({ name: 'P' + a, kind: 'ai' as const, armies: [a] })),
+    players: [0, 1, 2, 3].map((a) => ({ name: 'P' + a, armies: [a] })),
   });
 }
 /** Empty board with the four armies alive. */
@@ -302,11 +305,11 @@ describe('round resolution', () => {
 describe('variants', () => {
   const two = () => newGame({
     mode: 2,
-    players: [{ name: 'N', kind: 'ai', armies: [G, B] }, { name: 'S', kind: 'ai', armies: [Y, R] }],
+    players: [{ name: 'N', armies: [G, B] }, { name: 'S', armies: [Y, R] }],
   });
   const three = () => bare(newGame({
     mode: 3,
-    players: [G, B, Y].map((a) => ({ name: 'P' + a, kind: 'ai' as const, armies: [a] })),
+    players: [G, B, Y].map((a) => ({ name: 'P' + a, armies: [a] })),
   }));
 
   it('two players: allied armies add up and never fight each other', () => {

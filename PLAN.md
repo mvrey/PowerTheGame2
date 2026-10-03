@@ -89,13 +89,17 @@ Gana quien capture todas las banderas rivales. Límite oficial de 2 h: gana el m
 
 ## 3. Arquitectura
 
+Desde el 2026-10-03 el motor ofrece una API pública y las IAs son bots enchufables; el detalle
+está en `ARCHITECTURE.md` (inglés) y la guía para escribir bots en `BOTS.md`.
+
 ```
-src/engine/   board.ts (grafo), types.ts, rules.ts (órdenes), resolve.ts (ronda + eventos), game.ts
-src/ai/       evaluate.ts, planner.ts, generals.ts (personalidades y niveles)
-src/ui/       app, screens (menú, nueva partida, juego, opciones, reglas, fin), boardView, pieces,
-              orderSheet, animator, audio, i18n, storage
-tests/        reglas, conflictos, variantes, fuzz IA
-tools/        render de MIDI y conversión de audio
+src/engine/   board.ts (grafo por mapa), types.ts, rules.ts (órdenes), resolve.ts (ronda + eventos), game.ts
+src/api/      API pública: Match, vistas, OrderSheet, órdenes legales, simulación, contrato de bot, clientes
+src/bots/     registro de bots; generales (planificador); bots de ejemplo
+src/ui/       anfitrión en navegador: menús, juego, tablero, audio, i18n, guardado
+src/server/   servidor HTTP para bots remotos
+tests/        reglas, API, bots, mapas, servidor, límites de la arquitectura
+tools/        arena (torneos), remote-bot, render de MIDI
 ```
 
 ## 4. UX

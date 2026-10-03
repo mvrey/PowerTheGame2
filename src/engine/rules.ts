@@ -1,4 +1,4 @@
-import { HQ, NUM_ARMIES, NUM_NODES, RESERVE, canReach } from './board';
+import { NUM_ARMIES, RESERVE, boardOf } from './board';
 import { addPiece, mayCommand } from './game';
 import { GameState, MISSILE_COST, NO_ORIGIN, Order, OrderError, Piece, PieceType, PIECES } from './types';
 
@@ -19,9 +19,31 @@ export function spendValue(spend: Partial<Record<PieceType, number>>, power: num
   return total;
 }
 
+const isInt = (v: unknown): v is number => Number.isInteger(v);
+const isType = (v: unknown): v is PieceType => typeof v === 'string' && Object.prototype.hasOwnProperty.call(PIECES, v);
+
+/** Whether a value has the shape of an order. Orders may come from untrusted sources (bots over HTTP). */
+export function isWellFormed(order: unknown): order is Order {
+  if (typeof order !== 'object' || order === null) return false;
+  const o = order as Record<string, unknown>;
+  if (!isInt(o.army)) return false;
+  switch (o.k) {
+    case 'move': return isType(o.type) && isInt(o.from) && isInt(o.to);
+    case 'buy': return isType(o.type);
+    case 'up': return isType(o.type) && isInt(o.at);
+    case 'mk':
+      return isInt(o.at) && isInt(o.power) && typeof o.spend === 'object' && o.spend !== null
+        && Object.entries(o.spend).every(([type, n]) => isType(type) && (n === undefined || isInt(n)));
+    case 'launch': return isInt(o.from) && isInt(o.target) && isInt(o.targetArmy);
+    default: return false;
+  }
+}
+
 /** Returns null when `order` is legal for `player` in `state`. */
 export function checkOrder(state: GameState, player: number, order: Order): OrderError | null {
+  if (!isWellFormed(order)) return 'malformed';
   const army = state.armies[order.army];
+  const board = boardOf(state);
   if (!army || !army.alive) return 'dead';
   if (!mayCommand(state, player, order.army)) return 'notYours';
   switch (order.k) {
@@ -32,9 +54,9 @@ export function checkOrder(state: GameState, player: number, order: Order): Orde
         return state.pieces.some((p) => p.army === order.army && p.type === order.type && p.loc === order.from)
           ? 'cantMove' : 'noPiece';
       }
-      if (order.from === RESERVE) return order.to === HQ[order.army] ? null : 'onlyHQ';
-      if (order.to < 0 || order.to >= NUM_NODES) return 'unreachable';
-      return canReach(def.cls, order.from, order.to) ? null : 'unreachable';
+      if (order.from === RESERVE) return order.to === board.hq[order.army] ? null : 'onlyHQ';
+      if (order.to < 0 || order.to >= board.numNodes) return 'unreachable';
+      return board.canReach(def.cls, order.from, order.to) ? null : 'unreachable';
     }
     case 'buy':
       if (PIECES[order.type].group !== 1) return 'badType';
@@ -58,7 +80,7 @@ export function checkOrder(state: GameState, player: number, order: Order): Orde
         return order.targetArmy >= 0 && order.targetArmy < NUM_ARMIES && state.armies[order.targetArmy].alive
           ? null : 'badTarget';
       }
-      return order.target >= 0 && order.target < NUM_NODES ? null : 'badTarget';
+      return order.target >= 0 && order.target < board.numNodes ? null : 'badTarget';
     }
   }
 }

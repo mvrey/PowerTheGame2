@@ -1,7 +1,7 @@
 // Board graph for Power, built from a map definition (see maps.ts).
 //
-// The module exposes the board of the map currently in play; `useMap` switches it.
-// Importers see the new board through the live bindings below.
+// A Board is immutable and built once per map; a game finds its own with boardOf(state),
+// so games on different maps can run side by side.
 
 import { DEFAULT_MAP, MapDef, mapById } from './maps';
 
@@ -29,20 +29,30 @@ export const RESERVE = -1;
 
 const CLASSES: MoveClass[] = ['inf', 'tank', 'air', 'naval'];
 const RANGE: Record<MoveClass, number> = { inf: 2, tank: 3, air: 5, naval: 1 };
-type ByClass<T> = Record<MoveClass, T>;
+export type ByClass<T> = Record<MoveClass, T>;
 
-interface Board {
-  map: MapDef;
+/** The graph of one map. */
+export interface Board {
+  def: MapDef;
   nodes: BoardNode[];
+  numNodes: number;
+  /** Node index by id, e.g. byId['G4']. */
   byId: Record<string, number>;
   /** grid[y][x] = node index, or -1 for an empty cell. */
   grid: number[][];
+  /** HQ node of each army. */
   hq: number[];
+  /** Sector node indices per territory. */
   territory: number[][];
   adj: number[][];
+  /** reach[class][from] = nodes reachable in one move. Empty when the class cannot stand on `from`. */
   reach: ByClass<number[][]>;
-  reachSet: ByClass<Set<number>[]>;
+  /** rounds[class][from][to] = rounds needed to get from `from` to `to` (Infinity if impossible). */
   rounds: ByClass<number[][]>;
+  /** Whether a unit of the class may stand on the node. */
+  canEnter(cls: MoveClass, node: number): boolean;
+  /** Whether a unit of the class may go from one node to the other in a single move. */
+  canReach(cls: MoveClass, from: number, to: number): boolean;
 }
 
 function parse(map: MapDef): { nodes: BoardNode[]; grid: number[][] } {
@@ -148,63 +158,36 @@ function build(map: MapDef): Board {
     return d;
   }));
 
+  const reachSet = perClass((cls) => reach[cls].map((list) => new Set(list)));
   return {
-    map,
+    def: map,
     nodes,
+    numNodes: nodes.length,
     grid,
     byId: Object.fromEntries(nodes.map((n) => [n.id, n.idx])),
     hq: [0, 1, 2, 3].map((a) => nodes.find((n) => n.kind === 'hq' && n.army === a)!.idx),
     territory: [0, 1, 2, 3].map((a) => nodes.filter((n) => n.kind === 'sector' && n.army === a).map((n) => n.idx)),
     adj,
     reach,
-    reachSet: perClass((cls) => reach[cls].map((list) => new Set(list))),
     rounds,
+    canEnter: (cls, node) => node >= 0 && node < nodes.length && enter(cls, node),
+    canReach: (cls, from, to) => reachSet[cls][from]?.has(to) ?? false,
   };
 }
 
 const built = new Map<string, Board>();
-let board: Board;
 
-export let MAP: MapDef;
-export let NODES: BoardNode[];
-export let NUM_NODES: number;
-export let NODE_BY_ID: Record<string, number>;
-/** GRID[y][x] = node index, or -1 for an empty cell. */
-export let GRID: number[][];
-export let HQ: number[];
-/** Sector node indices per territory. */
-export let TERRITORY: number[][];
-export let ADJ: number[][];
-/** REACH[class][from] = nodes reachable in one move. Empty when the class cannot stand on `from`. */
-export let REACH: ByClass<number[][]>;
-/** ROUNDS[class][from][to] = rounds needed to get from `from` to `to` (Infinity if impossible). */
-export let ROUNDS: ByClass<number[][]>;
-
-/** Makes `id` the map in play. Boards are built once and cached. */
-export function useMap(id: string | undefined): void {
+/** The board of a map (the classic one for an unknown id). Built on first use, then cached. */
+export function getBoard(id: string | undefined): Board {
   const map = mapById(id);
-  if (board?.map === map) return;
   if (!built.has(map.id)) built.set(map.id, build(map));
-  board = built.get(map.id)!;
-  MAP = board.map;
-  NODES = board.nodes;
-  NUM_NODES = board.nodes.length;
-  NODE_BY_ID = board.byId;
-  GRID = board.grid;
-  HQ = board.hq;
-  TERRITORY = board.territory;
-  ADJ = board.adj;
-  REACH = board.reach;
-  ROUNDS = board.rounds;
+  return built.get(map.id)!;
 }
 
-export function canEnter(cls: MoveClass, node: number): boolean {
-  const n = NODES[node];
-  return cls === 'naval' ? n.kind !== 'sector' || n.coastal : n.kind !== 'sea';
+/** The board a game is played on. */
+export function boardOf(state: { map: string }): Board {
+  return getBoard(state.map);
 }
 
-export function canReach(cls: MoveClass, from: number, to: number): boolean {
-  return board.reachSet[cls][from].has(to);
-}
+export { DEFAULT_MAP };
 
-useMap(DEFAULT_MAP);

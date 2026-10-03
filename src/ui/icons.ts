@@ -1,4 +1,4 @@
-import { PieceType } from '../engine/types';
+import type { PieceType } from '../api';
 import { h } from './dom';
 
 export interface ArmyColors { fill: string; dark: string; ink: string }

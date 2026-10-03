@@ -1,4 +1,4 @@
-import { HQ, NODES, NUM_ARMIES, RESERVE } from './board';
+import { NUM_ARMIES, RESERVE, boardOf } from './board';
 import {
   addPiece, armyStrength, livingArmies, playerFlags, playerStrength, seatOrder, snapshot, teamOf, withinBudget,
 } from './game';
@@ -6,8 +6,10 @@ import { applyOrder, checkOrder } from './rules';
 import { GameState, MERC, NO_ORIGIN, Order, OrderError, Piece, PIECES, RoundEvent } from './types';
 
 export interface ResolveOptions {
-  /** Record events (with snapshots) for playback. Simulations leave this off. */
+  /** Collect the round's events. Simulations usually leave this off. */
   record?: boolean;
+  /** Attach a snapshot of the board to every recorded event, for animated playback. */
+  snapshots?: boolean;
   /** The time limit has expired: the game ends after this round. */
   lastRound?: boolean;
 }
@@ -18,7 +20,7 @@ type Emit = (event: RoundEvent) => void;
 export function resolveRound(state: GameState, orders: Order[][], opts: ResolveOptions = {}): RoundEvent[] {
   const events: RoundEvent[] = [];
   const emit: Emit = opts.record
-    ? (event) => { event.snap = snapshot(state); events.push(event); }
+    ? (event) => { if (opts.snapshots) event.snap = snapshot(state); events.push(event); }
     : () => {};
 
   executeOrders(state, orders, emit);
@@ -273,10 +275,11 @@ function capture(piece: Piece, army: number): void {
 // ------------------------------------------------------------ power & flags
 
 function collectPower(state: GameState, emit: Emit): void {
+  const { nodes } = boardOf(state);
   const held: Set<number>[] = state.armies.map(() => new Set<number>());
   for (const p of state.pieces) {
     if (p.loc === RESERVE) continue;
-    const node = NODES[p.loc];
+    const node = nodes[p.loc];
     if (node.kind !== 'sector' || !state.armies[node.army].alive) continue;
     if (teamOf(state, node.army) !== teamOf(state, p.army)) held[p.army].add(node.army);
   }
@@ -290,11 +293,12 @@ function collectPower(state: GameState, emit: Emit): void {
 }
 
 function captureFlags(state: GameState, emit: Emit): void {
+  const { hq } = boardOf(state);
   const first = state.players[state.referee]?.armies[0] ?? 0;
   for (let i = 0; i < NUM_ARMIES; i++) {
     const victim = state.armies[(first + i) % NUM_ARMIES];
     if (!victim.alive) continue;
-    const sides = sidesAt(state, HQ[victim.id]);
+    const sides = sidesAt(state, hq[victim.id]);
     if (sides.length !== 1 || sides[0].team === victim.controller) continue;
     const infantry = sides[0].pieces.filter((p) => p.type === 'S' || p.type === 'R');
     if (!infantry.length) continue;

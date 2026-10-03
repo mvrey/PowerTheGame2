@@ -34,7 +34,7 @@ under **How to play**.
 - **Players**: 4 (free for all), 3 (the fourth army is mercenary and anyone may order it about)
   or 2 (two allied armies each).
 - **Rivals**: six generals with different temperaments, each at one of three levels
-  (Recruit, Captain, General).
+  (Recruit, Captain, General), plus any bot you write (see below).
 - **Clocks**: the official 3-minute order clock and 2-hour game limit, both optional.
 
 The game saves itself at the start of every round.
@@ -83,7 +83,7 @@ Maps are plain text grids in `src/engine/maps.ts`. Each cell names the space it 
 - Rows and columns without sectors are drawn narrower; `cols` and `heights` override the sizes.
 
 Then add its name and description to `src/ui/i18n.ts` (`map.mymap`, `map.mymap.text`, in both
-languages). The board drawing, the movement tables and the AI all derive from the grid, and
+languages). The board drawing, the movement tables and the bots all derive from the grid, and
 `tests/maps.test.ts` automatically checks the new map for soundness, fairness and full AI games.
 
 ## Rules and assumptions
@@ -91,28 +91,50 @@ languages). The board drawing, the movement tables and the AI all derive from th
 `PLAN.md` lists the rules as implemented and the nine points where the rulebook is not explicit
 and a decision had to be made (for example, Megamissiles detonate once everyone has moved).
 
-## How the AI works
+## Write your own bot
 
-All players move at once, so there is no turn tree to search. Each AI builds several candidate
+Opponents are pluggable. A bot is a file named `*.bot.ts` under `src/bots/` exporting a
+definition with a `decide(view, ctx)` function that returns the round's orders; it is picked up
+automatically and appears in the game's menus, in the arena and on the server. Bots can also be
+separate programs, in any language, that play over HTTP.
+
+```
+npm run arena -- bots=mybot,okoye:3,kruger,vega games=10   # headless tournament
+npm run server                                             # host matches over HTTP
+python examples/http_bot.py --vs kruger:1,vega:1,rookie    # a remote bot in Python
+```
+
+**[BOTS.md](BOTS.md)** is the guide: the bot contract, the toolkit (order sheets, legal orders,
+simulation with the real rules), testing, and the HTTP endpoints. `ARCHITECTURE.md` explains how
+the engine, its API, the bots and the hosts fit together.
+
+## How the generals play
+
+All players move at once, so there is no turn tree to search. Each general builds several candidate
 plans out of small tactics (defend the HQ, attack a space with just enough force, occupy enemy
 land for income, trade up, march infantry on a flag, and so on), imagines several plans for each
 rival the same way, plays every candidate against every scenario with the real rules engine and
 keeps the plan with the best outcome. The level sets how many plans and scenarios it weighs; the
 general's temperament weights both the tactics and the evaluation. It looks one round ahead.
+The generals are ordinary bots written against the public API (`src/bots/generals/`).
 
 ## Code
 
 ```
-src/engine/   Pure rules: maps, board graph, orders, round resolution
-src/ai/       Board analysis, position evaluation, planner, generals
-src/ui/       Interface: SVG board, game screen, menus, audio, languages, saving
-tests/        Vitest: rules, variants, maps, full AI-versus-AI games
-tools/        selfplay.ts (AI diagnostics), render-midi.cjs (MIDI to WAV)
+src/engine/   Pure rules: maps, board graph, orders, round resolution (internal)
+src/api/      The engine's public API: Match, views, order sheets, legal orders, simulation,
+              the bot contract, local and HTTP clients
+src/bots/     Bot registry; the generals; example bots (Rookie, Greedy)
+src/ui/       Browser host: SVG board, game screen, menus, audio, languages, saving
+src/server/   HTTP server hosting matches for remote bots
+tests/        Vitest: rules, API, bots, maps, HTTP server, architecture boundaries
+tools/        arena.ts (tournaments), remote-bot.ts (play on a server), render-midi.cjs (MIDI to WAV)
+examples/     http_bot.py, a bot in Python over HTTP
 Audio/        Original assets (WAV and MIDI)
 public/audio/ The same, converted to MP3 for the browser
 ```
 
-Commands: `npm test`, `npm run build`, `npx vite-node tools/selfplay.ts 4 10 2222`.
+Commands: `npm test`, `npm run build`, `npm run arena`, `npm run server`, `npm run bot`.
 Adding `#autoplay` to the URL makes an AI play your seat, which is handy for debugging.
 
 The music was produced by rendering the MIDI files with `js-synthesizer` and the GeneralUser GS

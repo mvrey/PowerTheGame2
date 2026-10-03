@@ -70,11 +70,8 @@ export interface PlayerStats {
 export interface Player {
   id: number;
   name: string;
-  kind: 'human' | 'ai';
   armies: number[];
   alive: boolean;
-  general?: string;
-  level?: number;
   stats: PlayerStats;
 }
 
@@ -112,7 +109,7 @@ export type Order =
 
 export type OrderError =
   | 'dead' | 'notYours' | 'noPiece' | 'cantMove' | 'unreachable' | 'onlyHQ' | 'noPower'
-  | 'badType' | 'needThree' | 'tooWeak' | 'badSpend' | 'noMissile' | 'badTarget' | 'budget' | 'cancelled';
+  | 'badType' | 'needThree' | 'tooWeak' | 'badSpend' | 'noMissile' | 'badTarget' | 'budget' | 'cancelled' | 'malformed';
 
 export interface Snapshot {
   pieces: { id: number; type: PieceType; army: number; loc: number }[];

@@ -1,5 +1,4 @@
-import { BoardNode, HQ, NODES, RESERVE } from '../engine/board';
-import { PIECE_TYPES, PieceType, Snapshot } from '../engine/types';
+import { Board, BoardNode, PIECE_TYPES, PieceType, RESERVE, Snapshot } from '../api';
 import { svg } from './dom';
 import { Layout, Point, layout } from './geometry';
 import { ARMY_COLORS, isBig } from './icons';
@@ -10,7 +9,7 @@ export interface Arrow { from: number; to: number; army: number; kind: 'move' | 
 interface Handlers {
   click(node: number): void;
   hover(node: number | null, event?: MouseEvent): void;
-  label(node: number): string;
+  label(node: BoardNode): string;
 }
 
 // Terrain per army seat: grassland, snow, forest, desert.
@@ -85,9 +84,9 @@ function terrain(lay: Layout, nodes: BoardNode[], uid: string): string {
 export class BoardView {
   readonly root: SVGSVGElement;
   /** Geometry and spaces of the map this board was created for. */
-  private lay: Layout = layout();
-  private nodes: BoardNode[] = NODES;
-  private hq: number[] = HQ;
+  private lay: Layout;
+  private nodes: BoardNode[];
+  private hq: number[];
   private uid = `b${instances++}-`;
   private nodeEls: SVGPathElement[] = [];
   private tokens = svg('g', { class: 'tokens' });
@@ -95,7 +94,10 @@ export class BoardView {
   private flags = svg('g', { class: 'flags' });
   private fx = svg('g', { class: 'fx' });
 
-  constructor(private handlers: Handlers) {
+  constructor(board: Board, private handlers: Handlers) {
+    this.lay = layout(board);
+    this.nodes = board.nodes;
+    this.hq = board.hq;
     const { lay, nodes } = this;
     this.root = svg('svg', { viewBox: `0 0 ${lay.width} ${lay.height}`, class: 'board' });
     this.root.innerHTML = terrain(lay, nodes, this.uid);
@@ -110,7 +112,7 @@ export class BoardView {
       el.addEventListener('mouseleave', () => handlers.hover(null));
       this.nodeEls.push(el);
       grid.append(el);
-      const text = svg('text', { x: shape.label[0], y: shape.label[1], class: 'lbl ' + node.kind }, handlers.label(i));
+      const text = svg('text', { x: shape.label[0], y: shape.label[1], class: 'lbl ' + node.kind }, handlers.label(node));
       if (node.kind === 'sector' || node.kind === 'hq') text.style.fill = node.kind === 'hq' ? '#fff' : ARMY_COLORS[node.army].fill;
       labels.append(text);
     });
@@ -126,7 +128,7 @@ export class BoardView {
   }
 
   relabel(): void {
-    this.root.querySelectorAll<SVGTextElement>('.labels text').forEach((el, i) => (el.textContent = this.handlers.label(i)));
+    this.root.querySelectorAll<SVGTextElement>('.labels text').forEach((el, i) => (el.textContent = this.handlers.label(this.nodes[i])));
   }
 
   render(view: Snapshot): void {

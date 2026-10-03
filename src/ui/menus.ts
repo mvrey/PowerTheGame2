@@ -1,16 +1,13 @@
-import { GENERALS } from '../ai/generals';
-import { useMap } from '../engine/board';
-import { PlayerConfig } from '../engine/game';
-import { MAPS, mapById } from '../engine/maps';
-import { GROUP1, PIECES, PieceType } from '../engine/types';
+import { BotLevel, GROUP1, MAPS, PIECES, PieceType, getBoard, localize, mapById } from '../api';
+import { bots } from '../bots';
 import { audio } from './audio';
 import { BoardView } from './boardView';
 import { clear, h } from './dom';
 import { ARMY_COLORS, chip } from './icons';
-import { Key, Lang, armyName, nodeLabel, pieceName, setLang, t } from './i18n';
+import { Key, Lang, armyName, getLang, nodeLabel, pieceName, setLang, t } from './i18n';
 import { modal } from './modal';
 import { rulesContent } from './rules';
-import { Setup, loadGame, loadSetup, saveSettings, saveSetup, settings } from './settings';
+import { SeatConfig, Setup, loadGame, loadSetup, saveSettings, saveSetup, settings } from './settings';
 
 export interface MenuApi {
   showMenu(): void;
@@ -39,27 +36,26 @@ export function mainMenu(app: MenuApi): HTMLElement {
   );
 }
 
-interface Rival { general: string; level: number }
+interface Rival { bot: string; level: BotLevel }
 
 export function setupScreen(app: MenuApi): HTMLElement {
   const last = loadSetup();
   let map = mapById(last?.map).id;
   let mode: 2 | 3 | 4 = last?.mode ?? 4;
   // One small board per map, drawn once.
-  const previews = new Map(MAPS.map((m) => {
-    useMap(m.id);
-    return [m.id, new BoardView({ click: () => {}, hover: () => {}, label: nodeLabel }).root] as const;
-  }));
+  const previews = new Map(MAPS.map((m) =>
+    [m.id, new BoardView(getBoard(m.id), { click: () => {}, hover: () => {}, label: nodeLabel }).root] as const));
   let color = last?.players.find((p) => p.kind === 'human')?.armies[0] ?? 3;
   const previous = last?.players.filter((p) => p.kind === 'ai') ?? [];
+  const available = bots.list();
   const rivals: Rival[] = [0, 1, 2].map((i) => ({
-    general: previous[i]?.general ?? GENERALS[i].id,
+    bot: bots.has(previous[i]?.bot) ? previous[i].bot! : available[i].id,
     level: previous[i]?.level ?? 2,
   }));
-  // Keep the three slots on different generals.
+  // Keep the three slots on different bots.
   rivals.forEach((r, i) => {
-    if (rivals.findIndex((x) => x.general === r.general) !== i)
-      r.general = GENERALS.find((g) => !rivals.some((x) => x.general === g.id))!.id;
+    if (rivals.findIndex((x) => x.bot === r.bot) !== i)
+      r.bot = available.find((d) => !rivals.some((x) => x.bot === d.id))!.id;
   });
   let orderTimer = last?.orderTimer ?? true;
   let gameLimit = last?.gameLimit ?? true;
@@ -67,11 +63,11 @@ export function setupScreen(app: MenuApi): HTMLElement {
   const root = h('div.menu');
   const build = (): Setup => {
     const next = (n: number) => (color + n) % 4;
-    const players: PlayerConfig[] = [{ name: '', kind: 'human', armies: mode === 2 ? [color, next(1)] : [color] }];
+    const players: SeatConfig[] = [{ name: '', kind: 'human', armies: mode === 2 ? [color, next(1)] : [color] }];
     const seats = mode === 2 ? [[next(2), next(3)]] : mode === 3 ? [[next(1)], [next(2)]] : [[next(1)], [next(2)], [next(3)]];
     seats.forEach((armies, i) => {
-      const general = GENERALS.find((g) => g.id === rivals[i].general) ?? GENERALS[i];
-      players.push({ name: general.name, kind: 'ai', armies, general: general.id, level: rivals[i].level });
+      const def = bots.get(rivals[i].bot);
+      players.push({ name: def.name, kind: 'ai', armies, bot: def.id, level: rivals[i].level });
     });
     return { map, mode, players, orderTimer, gameLimit };
   };
@@ -84,21 +80,22 @@ export function setupScreen(app: MenuApi): HTMLElement {
     const used = new Set(setup.players.flatMap((p) => p.armies));
     const merc = [0, 1, 2, 3].filter((a) => !used.has(a));
     const rivalRows = setup.players.slice(1).map((p, i) => {
-      const pickGeneral = h('select', {
+      const def = bots.get(rivals[i].bot);
+      const pickBot = h('select', {
         onchange: (e: Event) => {
           const id = (e.target as HTMLSelectElement).value;
-          const other = rivals.findIndex((r, j) => j !== i && r.general === id);
-          if (other >= 0) rivals[other].general = rivals[i].general;
-          rivals[i].general = id;
+          const other = rivals.findIndex((r, j) => j !== i && r.bot === id);
+          if (other >= 0) rivals[other].bot = rivals[i].bot;
+          rivals[i].bot = id;
           render();
         },
-      }, ...GENERALS.map((g) => h('option', { value: g.id, selected: g.id === rivals[i].general }, g.name)));
-      const pickLevel = h('select', {
-        onchange: (e: Event) => { rivals[i].level = Number((e.target as HTMLSelectElement).value); },
+      }, ...available.map((d) => h('option', { value: d.id, selected: d.id === rivals[i].bot }, d.name)));
+      const pickLevel = def.levels === false ? null : h('select', {
+        onchange: (e: Event) => { rivals[i].level = Number((e.target as HTMLSelectElement).value) as BotLevel; },
       }, ...[1, 2, 3].map((l) => h('option', { value: String(l), selected: l === rivals[i].level }, t(('level.' + l) as Key))));
       return h('div.rival', null,
-        h('div.rival-head', null, ...armies(p.armies), pickGeneral, pickLevel),
-        h('div.muted', null, t(('gen.' + rivals[i].general) as Key)));
+        h('div.rival-head', null, ...armies(p.armies), pickBot, pickLevel),
+        h('div.muted', null, localize(def.description, getLang())));
     });
 
     root.append(h('div.menu-box.setup', null,

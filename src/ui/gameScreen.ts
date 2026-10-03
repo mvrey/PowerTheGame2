@@ -1,15 +1,10 @@
-import { generalById } from '../ai/generals';
-import { makeRng, planSteps } from '../ai/planner';
-import { HQ, NODES, NUM_ARMIES, REACH, RESERVE, useMap } from '../engine/board';
 import {
-  cloneState, livingArmies, mayCommand, newGame, ordersLeft, playerStrength, seatOrder, snapshot, withinBudget,
-} from '../engine/game';
-import { resolveRound } from '../engine/resolve';
-import { applyOrder, checkOrder, cheapestMissileSpend, spendValue } from '../engine/rules';
-import {
-  GROUP1, GameState, MERC, MISSILE_COST, ORDERS_PER_ARMY, Order, OrderError, PIECES, PIECE_TYPES, PieceType,
-  RoundEvent, Snapshot,
-} from '../engine/types';
+  Board, Bot, BotLevel, GROUP1, GameState, LocalGameClient, MERC, MISSILE_COST, Match, NUM_ARMIES, ORDERS_PER_ARMY, Order,
+  OrderError, OrderSheet, PIECES, PIECE_TYPES, PieceType, RESERVE, Rng, RoundEvent, Snapshot, cheapestMissileSpend,
+  livingArmies, makeRng, mayCommand, playTurn, playerStrength, randomSeed, runHeadless, seatOrder, snapshot, spendValue,
+  timeSlicer,
+} from '../api';
+import { bots } from '../bots';
 import { TAUNTS, audio } from './audio';
 import { Arrow, BoardView, Mark } from './boardView';
 import { clear, h, wait } from './dom';
@@ -40,16 +35,21 @@ function fmtClock(ms: number): string {
 
 export class GameScreen {
   readonly el: HTMLElement;
-  private state: GameState;
+  /** The game. The screen hosts it: bots and the human hand in orders, the screen plays the rounds. */
+  private match: Match;
+  private terrain: Board;
   private me: number;
   private board: BoardView;
 
   // Planning
-  private orders: Order[] = [];
-  private draft: GameState;
+  /** The human's orders for this round. */
+  private sheet: OrderSheet;
   private sel: Selection | null = null;
   private targeting: { army: number; from: number } | null = null;
-  private aiPlans: (Order[] | null)[] = [];
+  /** The bot playing each AI seat (null for the human). */
+  private bots: (Bot | null)[];
+  private rngs: Rng[];
+  private aiAbort = new AbortController();
   private aiDone: Promise<void> = Promise.resolve();
 
   // Flow
@@ -90,15 +90,18 @@ export class GameScreen {
   private boardWrap = h('div.board-wrap');
 
   constructor(private app: AppApi, private setup: Setup, saved?: SavedGame) {
-    this.state = saved ? saved.state : newGame(setup);
-    useMap(this.state.map);
+    this.match = saved ? Match.restore(saved.state) : Match.create(setup);
+    this.terrain = this.match.board;
     this.elapsedMs = saved?.elapsedMs ?? 0;
     this.log = saved?.log ?? [];
-    this.me = this.state.players.findIndex((p) => p.kind === 'human');
-    this.draft = cloneState(this.state);
+    this.me = setup.players.findIndex((p) => p.kind === 'human');
+    this.sheet = new OrderSheet(this.state, this.me);
     this.cur = snapshot(this.state);
+    this.bots = this.state.players.map((p) => (this.isAi(p.id) ? this.createBot(p.id) : null));
+    const seed = randomSeed();
+    this.rngs = this.state.players.map((p) => makeRng(seed + p.id * 7919));
 
-    this.board = new BoardView({
+    this.board = new BoardView(this.terrain, {
       click: (node) => this.onNode(node),
       hover: (node, ev) => this.onHover(node, ev),
       label: nodeLabel,
@@ -127,20 +130,49 @@ export class GameScreen {
 
   destroy(): void {
     this.alive = false;
+    this.aiAbort.abort();
     clearInterval(this.timer);
     window.removeEventListener('keydown', this.onKey);
   }
 
+  // ------------------------------------------------------------------ seats
+
+  private get state(): Readonly<GameState> {
+    return this.match.state;
+  }
+  private get orders(): readonly Order[] {
+    return this.sheet.orders;
+  }
+  /** The board as the human's orders so far would leave it. */
+  private get draft(): GameState {
+    return this.sheet.preview;
+  }
+  private isAi(player: number): boolean {
+    return this.setup.players[player]?.kind === 'ai';
+  }
+  private isHuman(player: number): boolean {
+    return this.setup.players[player]?.kind === 'human';
+  }
+  /** The bot chosen for a seat; a bot that is no longer installed is replaced by the balanced general. */
+  private createBot(player: number, level?: BotLevel): Bot {
+    const seat = this.setup.players[player];
+    const id = bots.has(seat.bot) ? seat.bot! : 'okoye';
+    return bots.create(id, { level: level ?? seat.level ?? 2 });
+  }
+
   // ------------------------------------------------------------------ names
 
+  private place(node: number): string {
+    return nodeName(node < 0 ? undefined : this.terrain.nodes[node]);
+  }
   private playerName(player: number): string {
     if (player === MERC) return t('game.mercs');
     const p = this.state.players[player];
-    return p.kind === 'human' ? t('common.you') : p.name;
+    return this.isHuman(player) ? t('common.you') : p.name;
   }
   /** Name used as the subject of a sentence: the human is referred to by colour. */
   private subject(player: number): string {
-    if (player === MERC || this.state.players[player].kind !== 'human') return this.playerName(player);
+    if (player === MERC || !this.isHuman(player)) return this.playerName(player);
     return `${this.state.players[player].armies.map(armyName).join(' + ')} (${t('common.you').toLowerCase()})`;
   }
   private ownerName(army: number): string {
@@ -152,11 +184,11 @@ export class GameScreen {
   }
   private orderText(o: Order): string {
     switch (o.k) {
-      case 'move': return t('order.move', pieceName(o.type), nodeName(o.from), nodeName(o.to));
+      case 'move': return t('order.move', pieceName(o.type), this.place(o.from), this.place(o.to));
       case 'buy': return t('order.buy', pieceName(o.type), PIECES[o.type].power);
-      case 'up': return t('order.up', pieceName(o.type), pieceName(PIECES[o.type].up!), nodeName(o.at));
-      case 'mk': return t('order.mk', nodeName(o.at));
-      case 'launch': return t('order.launch', o.target === RESERVE ? t('node.reserveOf', armyName(o.targetArmy)) : nodeName(o.target));
+      case 'up': return t('order.up', pieceName(o.type), pieceName(PIECES[o.type].up!), this.place(o.at));
+      case 'mk': return t('order.mk', this.place(o.at));
+      case 'launch': return t('order.launch', o.target === RESERVE ? t('node.reserveOf', armyName(o.targetArmy)) : this.place(o.target));
     }
   }
   private orderIcon(o: Order): IconName {
@@ -179,8 +211,7 @@ export class GameScreen {
     if (!this.alive) return;
     this.phase = 'plan';
     this.phaseLabel = t('game.phase.plan');
-    this.orders = [];
-    this.draft = cloneState(this.state);
+    this.sheet = new OrderSheet(this.state, this.me);
     this.cur = snapshot(this.state);
     this.sel = null;
     this.targeting = null;
@@ -208,10 +239,11 @@ export class GameScreen {
     await this.aiDone;
     await wait(300);
     if (!this.alive || this.phase !== 'plan' || this.state.round !== round) return;
-    const steps = planSteps(this.state, this.me, { level: 2, style: generalById('okoye').style, rng: makeRng(Date.now() >>> 0) });
-    let r = steps.next();
-    while (!r.done) r = steps.next();
-    for (const o of r.value) this.tryAdd(o);
+    const stand = bots.create('okoye', { level: 2 });
+    const signal = this.aiAbort.signal;
+    const orders = await stand.decide(this.match.view(this.me), { rng: makeRng(randomSeed()), checkpoint: timeSlicer(9, () => wait(0), signal), signal });
+    if (!this.alive || this.phase !== 'plan' || this.state.round !== round) return;
+    for (const o of orders) this.tryAdd(o);
     void this.submit(true);
   }
 
@@ -220,34 +252,26 @@ export class GameScreen {
   }
 
   private persist(): void {
-    saveGame({ v: 2, setup: this.setup, state: this.state, elapsedMs: this.elapsedMs, log: this.log.slice(-80) });
+    saveGame({ v: 3, setup: this.setup, state: this.match.exportState(), elapsedMs: this.elapsedMs, log: this.log.slice(-80) });
   }
 
+  /** The bots think while the human does, in slices so the page stays responsive. */
   private startAi(): void {
-    const base = cloneState(this.state);
-    const round = this.state.round;
-    this.aiPlans = this.state.players.map(() => null);
-    const rng = makeRng((Date.now() ^ (round * 7919)) >>> 0);
+    const signal = this.aiAbort.signal;
+    const checkpoint = timeSlicer(9, () => wait(0), signal);
     this.aiDone = (async () => {
-      for (const p of base.players) {
-        if (p.kind !== 'ai' || !p.alive) continue;
-        const steps = planSteps(base, p.id, {
-          level: (p.level ?? 2) as 1 | 2 | 3,
-          style: generalById(p.general).style,
-          rng,
-        });
-        for (;;) {
-          const started = performance.now();
-          let result = steps.next();
-          while (!result.done && performance.now() - started < 9) result = steps.next();
-          if (result.done) {
-            this.aiPlans[p.id] = result.value;
-            break;
-          }
-          await wait(0);
-          if (!this.alive) return;
+      for (const p of this.state.players) {
+        const bot = this.bots[p.id];
+        if (!bot || !p.alive) continue;
+        try {
+          await playTurn(bot, new LocalGameClient(this.match, p.id), {
+            rng: this.rngs[p.id], checkpoint, signal,
+            onProblem: (problem) => console.warn(`Bot ${this.setup.players[p.id].bot} (player ${p.id}):`, problem),
+          });
+        } catch {
+          return; // Aborted: the screen is gone.
         }
-        if (this.alive && this.state.round === round && this.phase === 'plan') this.renderCards();
+        if (this.alive && this.phase === 'plan') this.renderCards();
       }
     })();
   }
@@ -297,17 +321,19 @@ export class GameScreen {
     this.cur = snapshot(this.state);
     this.board.setArrows([]);
     this.renderAll();
-    if (this.aiPlans.some((plan, i) => !plan && this.state.players[i].kind === 'ai' && this.state.players[i].alive))
+    if (this.state.players.some((p) => this.isAi(p.id) && p.alive && !this.match.hasSubmitted(p.id)))
       this.setHint(t('game.waitingAi'));
+    if (this.humanAlive) {
+      const result = this.match.submit(this.me, this.orders);
+      if (!result.accepted) console.error('Orders refused', result);
+    }
     await this.aiDone;
     if (!this.alive) return;
 
-    const all = this.state.players.map((p) => (p.id === this.me ? (this.humanAlive ? this.orders : []) : this.aiPlans[p.id] ?? []));
-    const before = snapshot(this.state);
-    const events = resolveRound(this.state, all, { record: true, lastRound: this.isLastRound });
-    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__round = { before, all, events };
+    const report = this.match.resolveRound({ snapshots: true, lastRound: this.isLastRound });
+    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__round = report;
     if (this.state.over) clearSave();
-    await this.playback(before, events);
+    await this.playback(report.before, report.events);
     if (!this.alive) return;
 
     if (this.state.over) {
@@ -330,30 +356,15 @@ export class GameScreen {
 
   // --------------------------------------------------------------- planning
 
-  private rebuildDraft(): void {
-    const kept: Order[] = [];
-    this.draft = cloneState(this.state);
-    for (const o of this.orders) {
-      if (!withinBudget(this.state, this.me, kept, o) || checkOrder(this.draft, this.me, o)) continue;
-      applyOrder(this.draft, o);
-      kept.push(o);
-    }
-    const dropped = this.orders.length - kept.length;
-    this.orders = kept;
-    if (dropped > 0) toast(t('game.dropped', dropped));
-  }
-
   private tryAdd(order: Order): boolean {
     if (this.phase !== 'plan') return false;
-    const error: OrderError | null = withinBudget(this.state, this.me, this.orders, order)
-      ? checkOrder(this.draft, this.me, order) : 'budget';
+    const error = this.sheet.check(order);
     if (error) {
       toast(errorText(error));
       audio.sfx('dope', { volume: 0.6 });
       return false;
     }
-    applyOrder(this.draft, order);
-    this.orders.push(order);
+    this.sheet.add(order);
     this.sel = null;
     this.targeting = null;
     this.closePopover();
@@ -362,8 +373,8 @@ export class GameScreen {
   }
 
   private removeOrder(index: number): void {
-    this.orders.splice(index, 1);
-    this.rebuildDraft();
+    const dropped = this.sheet.removeAt(index);
+    if (dropped > 0) toast(t('game.dropped', dropped));
     this.cancelSelection();
   }
 
@@ -375,7 +386,7 @@ export class GameScreen {
   }
 
   private left(army: number): number {
-    return ordersLeft(this.state, this.me, this.orders, army);
+    return this.sheet.left(army);
   }
 
   private movableCount(army: number, type: PieceType, loc: number): number {
@@ -394,7 +405,7 @@ export class GameScreen {
     }
     if (this.sel) {
       const sel = this.sel;
-      if (sel.from !== RESERVE && REACH[PIECES[sel.type].cls!][sel.from].includes(node)) {
+      if (sel.from !== RESERVE && this.terrain.reach[PIECES[sel.type].cls!][sel.from].includes(node)) {
         this.tryAdd({ k: 'move', army: sel.army, type: sel.type, from: sel.from, to: node });
         return;
       }
@@ -455,7 +466,7 @@ export class GameScreen {
     this.renderAll();
     const wrap = this.boardWrap.getBoundingClientRect();
     const pt = this.board.clientPoint(node);
-    this.popEl.append(h('div.pop-title', null, nodeName(node)), ...rows);
+    this.popEl.append(h('div.pop-title', null, this.place(node)), ...rows);
     this.popEl.classList.add('open');
     const x = Math.min(Math.max(pt.x - wrap.left, 110), wrap.width - 110);
     const below = pt.y - wrap.top < wrap.height * 0.6;
@@ -523,7 +534,7 @@ export class GameScreen {
         h('button.btn.small', { onclick: () => step(big) }, '+'));
     });
     this.pause();
-    const dialog = modal(t('missile.title', nodeName(loc)), [h('p', null, t('missile.text')), ...rows, totalEl], [
+    const dialog = modal(t('missile.title', this.place(loc)), [h('p', null, t('missile.text')), ...rows, totalEl], [
       { label: t('common.cancel') },
       {
         label: t('common.confirm'), primary: true, action: () => {
@@ -580,14 +591,14 @@ export class GameScreen {
       for (const o of this.orders) {
         if (o.k === 'move' && o.from !== RESERVE) arrows.push({ from: o.from, to: o.to, army: o.army, kind: 'move' });
         if (o.k === 'launch' && o.target !== RESERVE)
-          arrows.push({ from: o.from === RESERVE ? HQ[o.army] : o.from, to: o.target, army: o.army, kind: 'launch' });
+          arrows.push({ from: o.from === RESERVE ? this.terrain.hq[o.army] : o.from, to: o.target, army: o.army, kind: 'launch' });
       }
       if (this.sel && this.sel.from !== RESERVE) {
         marks.set(this.sel.from, 'source');
-        for (const to of REACH[PIECES[this.sel.type].cls!][this.sel.from]) marks.set(to, 'dest');
+        for (const to of this.terrain.reach[PIECES[this.sel.type].cls!][this.sel.from]) marks.set(to, 'dest');
       }
       if (this.targeting) {
-        NODES.forEach((n) => marks.set(n.idx, 'target'));
+        this.terrain.nodes.forEach((n) => marks.set(n.idx, 'target'));
         if (this.targeting.from !== RESERVE) marks.set(this.targeting.from, 'source');
       }
     }
@@ -605,7 +616,7 @@ export class GameScreen {
     if (this.phase === 'over' || this.spectating) return this.setHint('');
     if (this.phase === 'play') return this.setHint('');
     if (this.targeting) return this.setHint(t('hint.target'));
-    if (this.sel) return this.setHint(t('hint.dest', pieceName(this.sel.type), nodeName(this.sel.from)));
+    if (this.sel) return this.setHint(t('hint.dest', pieceName(this.sel.type), this.place(this.sel.from)));
     if (this.orders.length >= this.maxOrders) return this.setHint(t('hint.full'));
     this.setHint(this.state.mode === 3 ? t('hint.idleMerc') : t('hint.idle'));
   }
@@ -650,8 +661,8 @@ export class GameScreen {
 
       let status = '';
       if (!alive) status = t('game.eliminated');
-      else if (controller !== MERC && this.state.players[controller].kind === 'ai' && this.phase === 'plan')
-        status = this.aiPlans[controller] ? t('game.ready') : t('game.thinking');
+      else if (controller !== MERC && this.isAi(controller) && this.phase === 'plan')
+        status = this.match.hasSubmitted(controller) ? t('game.ready') : t('game.thinking');
 
       const counts = new Map<PieceType, number>();
       for (const p of view.pieces) if (p.army === a && p.loc === RESERVE) counts.set(p.type, (counts.get(p.type) ?? 0) + 1);
@@ -666,7 +677,7 @@ export class GameScreen {
         } else {
           reserve.append(chip(type, a, n, {
             title: `${pieceName(type)} · ${t('game.deploy')}`,
-            onclick: () => this.tryAdd({ k: 'move', army: a, type, from: RESERVE, to: HQ[a] }),
+            onclick: () => this.tryAdd({ k: 'move', army: a, type, from: RESERVE, to: this.terrain.hq[a] }),
           }));
         }
       }
@@ -742,7 +753,7 @@ export class GameScreen {
       if (!this.orders.length && settings.hints) this.sheetEl.append(h('p.muted', null, t('game.noOrders')));
       this.actionsEl.append(
         h('button.btn', { disabled: !this.orders.length, onclick: () => this.removeOrder(this.orders.length - 1) }, t('game.undo')),
-        h('button.btn', { disabled: !this.orders.length, onclick: () => { this.orders = []; this.rebuildDraft(); this.cancelSelection(); } }, t('game.clearAll')),
+        h('button.btn', { disabled: !this.orders.length, onclick: () => { this.sheet.clear(); this.cancelSelection(); } }, t('game.clearAll')),
         h('button.btn.primary.wide', { onclick: () => void this.submit() }, t('game.submit')),
       );
       return;
@@ -779,7 +790,7 @@ export class GameScreen {
     }
     const view = this.view;
     clear(this.tipEl);
-    this.tipEl.append(h('b', null, nodeName(node)));
+    this.tipEl.append(h('b', null, this.place(node)));
     let any = false;
     for (let a = 0; a < NUM_ARMIES; a++) {
       const here = view.pieces.filter((p) => p.army === a && p.loc === node);
@@ -916,7 +927,7 @@ export class GameScreen {
           this.boardWrap.classList.add('shake');
           setTimeout(() => this.boardWrap.classList.remove('shake'), 600);
           this.pushLog(t('log.strike',
-            ev.target === RESERVE ? t('node.reserveOf', armyName(ev.targetArmy)) : nodeName(ev.target), ev.power));
+            ev.target === RESERVE ? t('node.reserveOf', armyName(ev.targetArmy)) : this.place(ev.target), ev.power));
           if (ev.snap) this.renderPlay(ev.snap);
           await pause(1000);
           break;
@@ -927,7 +938,7 @@ export class GameScreen {
           this.setPhase(t('game.phase.conflict'));
           this.board.effect(ev.node, 'bounce', 600);
           this.board.floatText(ev.node, t('fx.tie'));
-          this.pushLog(t('log.bounce', nodeName(ev.node)));
+          this.pushLog(t('log.bounce', this.place(ev.node)));
           await pause(380);
           let view = this.cur;
           for (const m of ev.moves) view = this.without(view, m.army, m.type, ev.node);
@@ -939,7 +950,7 @@ export class GameScreen {
 
         case 'standoff':
           this.board.floatText(ev.node, t('fx.standoff'));
-          this.pushLog(t('log.standoff', nodeName(ev.node)));
+          this.pushLog(t('log.standoff', this.place(ev.node)));
           await pause(450);
           break;
 
@@ -960,7 +971,7 @@ export class GameScreen {
             wait((i * 70) / speed).then(() => this.fly(c.type, c.army, from, this.point(RESERVE, taker), 520 / speed))));
           const loot = PIECE_TYPES.map((type) => [type, ev.captured.filter((c) => c.type === type).length] as const)
             .filter(([, n]) => n).map(([type, n]) => `${n}× ${pieceName(type)}`).join(', ');
-          this.pushLog(t('log.battle', this.subject(ev.winner), nodeName(ev.node), sorted.map((s) => s.power).join(' › '), loot));
+          this.pushLog(t('log.battle', this.subject(ev.winner), this.place(ev.node), sorted.map((s) => s.power).join(' › '), loot));
           const iLost = ev.captured.some((c) => iAm(c.army));
           if (iLost && ev.winner !== this.me && ev.winner !== MERC) audio.voice(TAUNTS.win);
           else if (ev.winner === this.me && ev.value >= 10) audio.voice(TAUNTS.lose);
@@ -985,7 +996,7 @@ export class GameScreen {
           this.pushLog(t('log.flag', captor, armyName(ev.victim)));
           this.showBanner(t('banner.flag', captor, armyName(ev.victim)), 2200);
           audio.sfx('flg_cap');
-          this.board.effect(HQ[ev.victim], 'battle', 900);
+          this.board.effect(this.terrain.hq[ev.victim], 'battle', 900);
           if (!iAm(ev.captor)) audio.voice(TAUNTS.kill, true);
           if (ev.snap) this.renderPlay(ev.snap);
           await pause(1900);
@@ -1071,26 +1082,19 @@ export class GameScreen {
       },
       {
         label: t('dead.end'), primary: true, action: () => {
-          this.finishInstantly();
+          void this.finishInstantly();
         },
       },
     ], { dismissable: false });
   }
 
   /** Plays the rest of the game without animation and shows the result. */
-  private finishInstantly(): void {
-    const rng = makeRng(Date.now() >>> 0);
-    let guard = 0;
-    while (!this.state.over && guard++ < 300) {
-      const all = this.state.players.map((p) => {
-        if (!p.alive || p.kind !== 'ai') return [];
-        const steps = planSteps(this.state, p.id, { level: 1, style: generalById(p.general).style, rng });
-        let r = steps.next();
-        while (!r.done) r = steps.next();
-        return r.value;
-      });
-      resolveRound(this.state, all, { lastRound: guard >= 60 });
-    }
+  private async finishInstantly(): Promise<void> {
+    // The same bots at their quickest, for at most 60 more rounds.
+    this.aiAbort.abort();
+    const quick = this.state.players.map((p) => (this.isAi(p.id) ? this.createBot(p.id, 1) : null));
+    await runHeadless(this.match, quick, { seed: randomSeed(), maxRounds: this.state.round + 59 });
+    if (!this.alive) return;
     clearSave();
     this.phase = 'over';
     this.cur = snapshot(this.state);

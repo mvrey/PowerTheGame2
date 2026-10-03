@@ -1,5 +1,4 @@
-import { HQ, NODES, NUM_NODES, RESERVE, ROUNDS } from '../engine/board';
-import { GameState, MERC, PIECES, PieceType } from '../engine/types';
+import { GameState, MERC, PIECES, PieceType, RESERVE, boardOf } from '../../api';
 import { VALUE, analyse, hostile } from './analysis';
 
 /** Temperament of an AI general: how much each concern weighs. */
@@ -15,6 +14,7 @@ const WIN = 100000;
 
 /** How good `state` looks for player `me`. Higher is better. */
 export function evaluate(state: GameState, me: number, style: Style = BALANCED): number {
+  const { hq: HQ, nodes: NODES, numNodes: NUM_NODES, rounds: ROUNDS } = boardOf(state);
   const player = state.players[me];
   if (!player.alive) return -WIN;
   if (state.over) return state.winners.includes(me) ? WIN / state.winners.length : -WIN / 2;
