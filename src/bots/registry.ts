@@ -55,5 +55,11 @@ export function definitionsIn(module: Record<string, unknown>): BotDefinition[] 
 
 function isDefinition(value: unknown): value is BotDefinition {
   const v = value as BotDefinition | null;
-  return typeof v === 'object' && v !== null && typeof v.id === 'string' && typeof v.name === 'string' && typeof v.create === 'function';
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    typeof v.id === 'string' &&
+    typeof v.name === 'string' &&
+    typeof v.create === 'function'
+  );
 }

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  Bot, BotDefinition, LocalGameClient, Order, TurnProblem, defineBot, playTurn, playerStrength, runHeadless,
+  Bot,
+  BotDefinition,
+  LocalGameClient,
+  Order,
+  TurnProblem,
+  defineBot,
+  playTurn,
+  playerStrength,
+  runHeadless,
 } from '../src/api';
 import { BotRegistry, bots, definitionsIn } from '../src/bots';
 import { countEmpty, newMatch } from './helpers';
@@ -28,22 +36,35 @@ describe('registry', () => {
 });
 
 describe('every registered bot', () => {
-  it.each(bots.list().map((d) => [d.id] as const))('%s plays legal, complete games', async (id) => {
-    for (const mode of [4, 2] as const) {
-      const match = newMatch(mode);
-      const problems: TurnProblem[] = [];
-      // The bot under test against the balanced general, at the quick level.
-      const players = match.state.players.map((p) => bots.create(p.id === 0 ? id : 'okoye', { level: 1 }));
-      const end = await runHeadless(match, players, { seed: 3, maxRounds: 25, onProblem: (_p, problem) => problems.push(problem) });
-      expect(problems).toEqual([]);
-      expect(end.over).toBe(true);
-    }
-  }, 120000);
+  it.each(bots.list().map((d) => [d.id] as const))(
+    '%s plays legal, complete games',
+    async (id) => {
+      for (const mode of [4, 2] as const) {
+        const match = newMatch(mode);
+        const problems: TurnProblem[] = [];
+        // The bot under test against the balanced general, at the quick level.
+        const players = match.state.players.map((p) => bots.create(p.id === 0 ? id : 'okoye', { level: 1 }));
+        const end = await runHeadless(match, players, {
+          seed: 3,
+          maxRounds: 25,
+          onProblem: (_p, problem) => problems.push(problem),
+        });
+        expect(problems).toEqual([]);
+        expect(end.over).toBe(true);
+      }
+    },
+    120000,
+  );
 });
 
 describe('the generals', () => {
-  it.each([[4, [2, 2, 2, 2]], [3, [2, 2, 2]], [2, [2, 2]]] as const)(
-    '%s players: only legal, non-empty plans', async (mode, levels) => {
+  it.each([
+    [4, [2, 2, 2, 2]],
+    [3, [2, 2, 2]],
+    [2, [2, 2]],
+  ] as const)(
+    '%s players: only legal, non-empty plans',
+    async (mode, levels) => {
       for (let seed = 1; seed <= 6; seed++) {
         const match = newMatch(mode);
         const tally = { empty: 0 };
@@ -54,7 +75,9 @@ describe('the generals', () => {
         expect(tally.empty).toBe(0);
         expect(end.over).toBe(true);
       }
-    }, 120000);
+    },
+    120000,
+  );
 
   it('the general out-plays the recruit', async () => {
     let wins = 0;
@@ -81,7 +104,11 @@ describe('the driver keeps faulty bots from spoiling a game', () => {
   };
 
   it('a bot that throws gives no orders', async () => {
-    const { match, problems, result } = await run({ decide: () => { throw new Error('boom'); } });
+    const { match, problems, result } = await run({
+      decide: () => {
+        throw new Error('boom');
+      },
+    });
     expect(result.accepted).toBe(true);
     expect(match.hasSubmitted(0)).toBe(true);
     expect(problems.map((p) => p.kind)).toEqual(['crashed']);
@@ -92,14 +119,17 @@ describe('the driver keeps faulty bots from spoiling a game', () => {
     const [to] = reach.inf[hq[0]];
     const { match, problems } = await run({
       decide: () => [
-        { k: 'move', army: 0, type: 'S', from: hq[0], to },
-        { k: 'move', army: 1, type: 'S', from: hq[1], to }, // not my army
-        { k: 'teleport' } as unknown as Order, // nonsense
-        { k: 'move', army: 0, type: 'T', from: hq[0], to },
+        { kind: 'move', army: 0, type: 'S', from: hq[0], to },
+        { kind: 'move', army: 1, type: 'S', from: hq[1], to }, // not my army
+        { kind: 'teleport' } as unknown as Order, // nonsense
+        { kind: 'move', army: 0, type: 'T', from: hq[0], to },
       ],
     });
     expect(problems).toHaveLength(1);
-    expect(problems[0].kind === 'illegal' && problems[0].problems.map((p) => p.error)).toEqual(['notYours', 'malformed']);
+    expect(problems[0].kind === 'illegal' && problems[0].problems.map((p) => p.error)).toEqual([
+      'notYours',
+      'malformed',
+    ]);
     const report = match.resolveRound();
     expect(report.orders[0]).toHaveLength(2);
   });

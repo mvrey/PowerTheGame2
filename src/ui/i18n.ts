@@ -1,4 +1,5 @@
-import type { BoardNode, OrderError, PieceType } from '../api';
+import type { BoardNode, BotLevel, Mode, OrderError, PieceType } from '../api';
+import type { Speed } from './settings';
 
 export type Lang = 'es' | 'en';
 
@@ -17,11 +18,24 @@ const es = {
   'common.on': 'Sí',
   'common.off': 'No',
 
-  'army.0': 'Verde', 'army.1': 'Azul', 'army.2': 'Amarillo', 'army.3': 'Rojo',
-  'piece.S': 'Soldado', 'piece.T': 'Tanque', 'piece.F': 'Caza', 'piece.D': 'Destructor',
-  'piece.R': 'Regimiento', 'piece.H': 'Tanque pesado', 'piece.B': 'Bombardero', 'piece.C': 'Crucero',
-  'piece.M': 'Megamisil', 'piece.P': 'Power',
-  'node.hq': 'CG {0}', 'node.island': 'Isla {0}', 'node.sea': 'Vía {0}', 'node.reserve': 'Reserva',
+  'army.0': 'Verde',
+  'army.1': 'Azul',
+  'army.2': 'Amarillo',
+  'army.3': 'Rojo',
+  'piece.S': 'Soldado',
+  'piece.T': 'Tanque',
+  'piece.F': 'Caza',
+  'piece.D': 'Destructor',
+  'piece.R': 'Regimiento',
+  'piece.H': 'Tanque pesado',
+  'piece.B': 'Bombardero',
+  'piece.C': 'Crucero',
+  'piece.M': 'Megamisil',
+  'piece.P': 'Power',
+  'node.hq': 'CG {0}',
+  'node.island': 'Isla {0}',
+  'node.sea': 'Vía {0}',
+  'node.reserve': 'Reserva',
   'node.reserveOf': 'Reserva de {0}',
   'isle.west': 'O',
   'label.hq': 'CG',
@@ -35,9 +49,11 @@ const es = {
   'map.ring': 'Anillo',
   'map.ring.text': 'El clásico sin isla central: solo llegas por tierra a tus dos vecinos.',
   'map.crossroads': 'Encrucijada',
-  'map.crossroads.text': 'Una única isla central para cruzar por tierra y cuatro vías marítimas que unen los cuarteles.',
+  'map.crossroads.text':
+    'Una única isla central para cruzar por tierra y cuatro vías marítimas que unen los cuarteles.',
   'map.archipelago': 'Archipiélago',
-  'map.archipelago.text': 'Patrias pequeñas entre diecisiete islas: la infantería avanza a saltos y mandan barcos y aviones.',
+  'map.archipelago.text':
+    'Patrias pequeñas entre diecisiete islas: la infantería avanza a saltos y mandan barcos y aviones.',
   'setup.players': 'Jugadores',
   'setup.players.2': '2 · dos ejércitos por bando',
   'setup.players.3': '3 · con ejército mercenario',
@@ -49,7 +65,9 @@ const es = {
   'setup.commands': 'Dirige {0}',
   'setup.merc': 'Mercenarios: {0}',
   'setup.level': 'Nivel',
-  'level.1': 'Recluta', 'level.2': 'Capitán', 'level.3': 'General',
+  'level.1': 'Recluta',
+  'level.2': 'Capitán',
+  'level.3': 'General',
   'setup.rulesBox': 'Reglas de tiempo',
   'setup.orderTimer': 'Reloj de órdenes ({0} min por ronda)',
   'setup.gameLimit': 'Límite de partida (2 horas)',
@@ -63,7 +81,9 @@ const es = {
   'opt.sfx': 'Efectos',
   'opt.voices': 'Voces de los generales',
   'opt.speed': 'Velocidad de la ronda',
-  'opt.speed.1': 'Normal', 'opt.speed.2': 'Rápida', 'opt.speed.3': 'Muy rápida',
+  'opt.speed.1': 'Normal',
+  'opt.speed.2': 'Rápida',
+  'opt.speed.3': 'Muy rápida',
   'opt.hints': 'Mostrar ayudas',
 
   'game.round': 'Ronda {0}',
@@ -122,14 +142,25 @@ const es = {
 
   'order.move': '{0}: {1} → {2}',
   'order.buy': 'Comprar {0} ({1} Power)',
-  'order.up': 'Canjear 3 × {0} por {1} en {2}',
-  'order.mk': 'Crear Megamisil en {0}',
+  'order.tradeUp': 'Canjear 3 × {0} por {1} en {2}',
+  'order.makeMissile': 'Crear Megamisil en {0}',
   'order.launch': 'Lanzar Megamisil a {0}',
-  'err.dead': 'ejército eliminado', 'err.notYours': 'no es tuyo', 'err.noPiece': 'no hay pieza',
-  'err.cantMove': 'no puede mover', 'err.unreachable': 'fuera de alcance', 'err.onlyHQ': 'solo al CG',
-  'err.noPower': 'falta Power', 'err.badType': 'tipo inválido', 'err.needThree': 'faltan piezas',
-  'err.tooWeak': 'menos de 100', 'err.badSpend': 'canje inválido', 'err.noMissile': 'sin misil',
-  'err.badTarget': 'objetivo inválido', 'err.budget': 'sin órdenes', 'err.cancelled': 'anulada por orden contraria', 'err.malformed': 'orden mal formada',
+  'err.dead': 'ejército eliminado',
+  'err.notYours': 'no es tuyo',
+  'err.noPiece': 'no hay pieza',
+  'err.cantMove': 'no puede mover',
+  'err.unreachable': 'fuera de alcance',
+  'err.onlyHQ': 'solo al CG',
+  'err.noPower': 'falta Power',
+  'err.badType': 'tipo inválido',
+  'err.needThree': 'faltan piezas',
+  'err.tooWeak': 'menos de 100',
+  'err.badSpend': 'canje inválido',
+  'err.noMissile': 'sin misil',
+  'err.badTarget': 'objetivo inválido',
+  'err.budget': 'sin órdenes',
+  'err.cancelled': 'anulada por orden contraria',
+  'err.malformed': 'orden mal formada',
 
   'log.round': '— Ronda {0} —',
   'log.battle': '{0} vence en {1} ({2}) y captura {3}.',
@@ -175,7 +206,6 @@ const es = {
   'over.income': 'Power cobrado',
   'over.again': 'Revancha',
   'over.menu': 'Menú principal',
-
 };
 
 const en: Record<keyof typeof es, string> = {
@@ -193,11 +223,24 @@ const en: Record<keyof typeof es, string> = {
   'common.on': 'Yes',
   'common.off': 'No',
 
-  'army.0': 'Green', 'army.1': 'Blue', 'army.2': 'Yellow', 'army.3': 'Red',
-  'piece.S': 'Soldier', 'piece.T': 'Tank', 'piece.F': 'Fighter', 'piece.D': 'Destroyer',
-  'piece.R': 'Regiment', 'piece.H': 'Heavy tank', 'piece.B': 'Bomber', 'piece.C': 'Cruiser',
-  'piece.M': 'Megamissile', 'piece.P': 'Power',
-  'node.hq': '{0} HQ', 'node.island': 'Island {0}', 'node.sea': 'Sea lane {0}', 'node.reserve': 'Reserve',
+  'army.0': 'Green',
+  'army.1': 'Blue',
+  'army.2': 'Yellow',
+  'army.3': 'Red',
+  'piece.S': 'Soldier',
+  'piece.T': 'Tank',
+  'piece.F': 'Fighter',
+  'piece.D': 'Destroyer',
+  'piece.R': 'Regiment',
+  'piece.H': 'Heavy tank',
+  'piece.B': 'Bomber',
+  'piece.C': 'Cruiser',
+  'piece.M': 'Megamissile',
+  'piece.P': 'Power',
+  'node.hq': '{0} HQ',
+  'node.island': 'Island {0}',
+  'node.sea': 'Sea lane {0}',
+  'node.reserve': 'Reserve',
   'node.reserveOf': "{0}'s Reserve",
   'isle.west': 'W',
   'label.hq': 'HQ',
@@ -207,7 +250,8 @@ const en: Record<keyof typeof es, string> = {
   'map.classic': 'Classic',
   'map.classic.text': 'The original board: four territories joined by five islands.',
   'map.continent': 'Mainland',
-  'map.continent.text': 'No islands and no channels: the territories share borders and the ground war is lightning fast.',
+  'map.continent.text':
+    'No islands and no channels: the territories share borders and the ground war is lightning fast.',
   'map.ring': 'Ring',
   'map.ring.text': 'The classic board without its central island: by land you only reach your two neighbours.',
   'map.crossroads': 'Crossroads',
@@ -225,7 +269,9 @@ const en: Record<keyof typeof es, string> = {
   'setup.commands': 'Commands {0}',
   'setup.merc': 'Mercenaries: {0}',
   'setup.level': 'Level',
-  'level.1': 'Recruit', 'level.2': 'Captain', 'level.3': 'General',
+  'level.1': 'Recruit',
+  'level.2': 'Captain',
+  'level.3': 'General',
   'setup.rulesBox': 'Time rules',
   'setup.orderTimer': 'Order clock ({0} min per round)',
   'setup.gameLimit': 'Game limit (2 hours)',
@@ -239,7 +285,9 @@ const en: Record<keyof typeof es, string> = {
   'opt.sfx': 'Sound effects',
   'opt.voices': "Generals' voices",
   'opt.speed': 'Round playback speed',
-  'opt.speed.1': 'Normal', 'opt.speed.2': 'Fast', 'opt.speed.3': 'Very fast',
+  'opt.speed.1': 'Normal',
+  'opt.speed.2': 'Fast',
+  'opt.speed.3': 'Very fast',
   'opt.hints': 'Show hints',
 
   'game.round': 'Round {0}',
@@ -298,14 +346,25 @@ const en: Record<keyof typeof es, string> = {
 
   'order.move': '{0}: {1} → {2}',
   'order.buy': 'Buy {0} ({1} Power)',
-  'order.up': 'Trade 3 × {0} for {1} on {2}',
-  'order.mk': 'Build Megamissile on {0}',
+  'order.tradeUp': 'Trade 3 × {0} for {1} on {2}',
+  'order.makeMissile': 'Build Megamissile on {0}',
   'order.launch': 'Launch Megamissile at {0}',
-  'err.dead': 'army eliminated', 'err.notYours': 'not yours', 'err.noPiece': 'no such piece',
-  'err.cantMove': 'cannot move', 'err.unreachable': 'out of range', 'err.onlyHQ': 'HQ only',
-  'err.noPower': 'not enough Power', 'err.badType': 'invalid type', 'err.needThree': 'pieces missing',
-  'err.tooWeak': 'under 100', 'err.badSpend': 'invalid trade', 'err.noMissile': 'no missile',
-  'err.badTarget': 'invalid target', 'err.budget': 'no orders left', 'err.cancelled': 'cancelled by a conflicting order', 'err.malformed': 'malformed order',
+  'err.dead': 'army eliminated',
+  'err.notYours': 'not yours',
+  'err.noPiece': 'no such piece',
+  'err.cantMove': 'cannot move',
+  'err.unreachable': 'out of range',
+  'err.onlyHQ': 'HQ only',
+  'err.noPower': 'not enough Power',
+  'err.badType': 'invalid type',
+  'err.needThree': 'pieces missing',
+  'err.tooWeak': 'under 100',
+  'err.badSpend': 'invalid trade',
+  'err.noMissile': 'no missile',
+  'err.badTarget': 'invalid target',
+  'err.budget': 'no orders left',
+  'err.cancelled': 'cancelled by a conflicting order',
+  'err.malformed': 'malformed order',
 
   'log.round': '— Round {0} —',
   'log.battle': '{0} wins on {1} ({2}) and captures {3}.',
@@ -351,7 +410,6 @@ const en: Record<keyof typeof es, string> = {
   'over.income': 'Power collected',
   'over.again': 'Rematch',
   'over.menu': 'Main menu',
-
 };
 
 export type Key = keyof typeof es;
@@ -365,12 +423,24 @@ export function setLang(next: Lang): void {
 export const getLang = () => lang;
 
 export function t(key: Key, ...args: (string | number)[]): string {
-  return TABLES[lang][key].replace(/\{(\d)\}/g, (_, i) => String(args[Number(i)] ?? ''));
+  // A missing text shows its key rather than breaking the screen; tests/i18n.test.ts catches it.
+  const text = TABLES[lang][key] ?? key;
+  return text.replace(/\{(\d)\}/g, (_, i) => String(args[Number(i)] ?? ''));
 }
 
-export const armyName = (army: number) => t(('army.' + army) as Key);
-export const pieceName = (type: PieceType | 'P') => t(('piece.' + type) as Key);
-export const errorText = (error: OrderError) => t(('err.' + error) as Key);
+/** Whether `key` has a text in `language`. */
+export const hasTranslation = (key: string, language: Lang): boolean => key in TABLES[language];
+
+// Keys built from game data. The casts live here only; tests/i18n.test.ts checks that every
+// value of the data has its text in both languages.
+export const armyName = (army: number) => t(`army.${army}` as Key);
+export const pieceName = (type: PieceType | 'P') => t(`piece.${type}` as Key);
+export const errorText = (error: OrderError) => t(`err.${error}` as Key);
+export const mapName = (mapId: string) => t(`map.${mapId}` as Key);
+export const mapText = (mapId: string) => t(`map.${mapId}.text` as Key);
+export const levelName = (level: BotLevel) => t(`level.${level}` as Key);
+export const speedName = (speed: Speed) => t(`opt.speed.${speed}` as Key);
+export const modeName = (mode: Mode) => t(`setup.players.${mode}` as Key);
 
 /** Islands are labelled by the text after their "I"; the west island follows the language. */
 const isleLabel = (id: string) => (id === 'IW' ? t('isle.west') : id.slice(1));
@@ -379,19 +449,27 @@ const isleLabel = (id: string) => (id === 'IW' ? t('isle.west') : id.slice(1));
 export function nodeName(n: BoardNode | undefined): string {
   if (!n) return t('node.reserve');
   switch (n.kind) {
-    case 'sector': return `${armyName(n.army)} ${n.num}`;
-    case 'hq': return t('node.hq', armyName(n.army));
-    case 'island': return t('node.island', isleLabel(n.id));
-    case 'sea': return t('node.sea', n.id);
+    case 'sector':
+      return `${armyName(n.army)} ${n.num}`;
+    case 'hq':
+      return t('node.hq', armyName(n.army));
+    case 'island':
+      return t('node.island', isleLabel(n.id));
+    case 'sea':
+      return t('node.sea', n.id);
   }
 }
 
 /** Short label printed on the board. */
 export function nodeLabel(n: BoardNode): string {
   switch (n.kind) {
-    case 'sector': return String(n.num);
-    case 'hq': return t('label.hq');
-    case 'island': return isleLabel(n.id);
-    case 'sea': return n.id;
+    case 'sector':
+      return String(n.num);
+    case 'hq':
+      return t('label.hq');
+    case 'island':
+      return isleLabel(n.id);
+    case 'sea':
+      return n.id;
   }
 }

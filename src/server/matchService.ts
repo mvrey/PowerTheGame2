@@ -1,13 +1,37 @@
 import { randomUUID } from 'node:crypto';
 import {
-  Bot, BotLevel, CreateMatchRequest, CreateMatchResponse, LocalGameClient, MAPS, Match, MatchStatus, MatchSummary, Order,
-  PlayerView, RoundReport, Rng, SeatInfo, SubmitResult, makeRng, movedPast, playTurn, randomSeed, timeSlicer,
+  Bot,
+  CreateMatchRequest,
+  CreateMatchResponse,
+  LocalGameClient,
+  MAPS,
+  Match,
+  MatchStatus,
+  MatchSummary,
+  NUM_ARMIES,
+  Order,
+  PlayerView,
+  RoundReport,
+  Rng,
+  SeatInfo,
+  SubmitResult,
+  defaultSeating,
+  isBotLevel,
+  isMode,
+  movedPast,
+  playTurn,
+  randomSeed,
+  seatRng,
+  timeSlicer,
 } from '../api';
 import { BotRegistry } from '../bots';
 
 /** A request the service cannot honour; `status` is the HTTP status that fits. */
 export class ServiceError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -42,7 +66,6 @@ interface Hosted {
   resolving: boolean;
 }
 
-const DEFAULT_ARMIES: Record<2 | 3 | 4, number[][]> = { 2: [[0, 1], [2, 3]], 3: [[0], [1], [2]], 4: [[0], [1], [2], [3]] };
 const breathe = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /**
@@ -69,35 +92,52 @@ export class MatchService {
   create(req: CreateMatchRequest): CreateMatchResponse {
     if (!req || !Array.isArray(req.seats)) throw new ServiceError(400, 'seats: expected a list of seats');
     const mode = req.mode ?? req.seats.length;
-    if (mode !== 2 && mode !== 3 && mode !== 4) throw new ServiceError(400, 'mode must be 2, 3 or 4');
+    if (!isMode(mode)) throw new ServiceError(400, 'mode must be 2, 3 or 4');
     if (req.seats.length !== mode) throw new ServiceError(400, `a ${mode}-player match needs ${mode} seats`);
     if (req.map !== undefined && !MAPS.some((m) => m.id === req.map))
       throw new ServiceError(400, `unknown map "${req.map}"; maps: ${MAPS.map((m) => m.id).join(', ')}`);
     const maxRounds = req.maxRounds ?? 100;
-    if (!Number.isInteger(maxRounds) || maxRounds < 1 || maxRounds > 1000) throw new ServiceError(400, 'maxRounds must be 1..1000');
+    if (!Number.isInteger(maxRounds) || maxRounds < 1 || maxRounds > 1000)
+      throw new ServiceError(400, 'maxRounds must be 1..1000');
     if (req.orderTimeoutMs !== undefined && !(Number.isFinite(req.orderTimeoutMs) && req.orderTimeoutMs >= 100))
       throw new ServiceError(400, 'orderTimeoutMs must be at least 100');
 
     const used = new Set<number>();
     const seed = Number.isInteger(req.seed) ? req.seed! : randomSeed();
+    const seating = defaultSeating(mode);
     const seats: Seat[] = req.seats.map((s, player) => {
-      const armies = s?.armies ?? DEFAULT_ARMIES[mode][player];
-      const perSeat = mode === 2 ? 2 : 1;
-      if (!Array.isArray(armies) || armies.length !== perSeat || armies.some((a) => !Number.isInteger(a) || a < 0 || a > 3 || used.has(a)))
-        throw new ServiceError(400, `seat ${player}: armies must be ${perSeat} distinct army numbers (0-3) not used by another seat`);
+      const armies = s?.armies ?? seating[player];
+      const perSeat = seating[0].length;
+      const isFreeArmy = (a: unknown) =>
+        Number.isInteger(a) && (a as number) >= 0 && (a as number) < NUM_ARMIES && !used.has(a as number);
+      if (!Array.isArray(armies) || armies.length !== perSeat || !armies.every(isFreeArmy))
+        throw new ServiceError(
+          400,
+          `seat ${player}: armies must be ${perSeat} distinct army numbers (0-${NUM_ARMIES - 1}) not used by another seat`,
+        );
       armies.forEach((a) => used.add(a));
-      const rng = makeRng(seed * 7919 + player * 104729);
-      if (s.bot === undefined) return { player, name: s.name ?? `Player ${player + 1}`, armies, token: randomUUID(), rng };
+      const rng = seatRng(seed, player);
+      if (s.bot === undefined)
+        return { player, name: s.name ?? `Player ${player + 1}`, armies, token: randomUUID(), rng };
       if (!this.registry.has(s.bot)) throw new ServiceError(400, `seat ${player}: unknown bot "${s.bot}"`);
-      const level: BotLevel = s.level ?? 2;
-      if (![1, 2, 3].includes(level)) throw new ServiceError(400, `seat ${player}: level must be 1, 2 or 3`);
+      const level = s.level ?? 2;
+      if (!isBotLevel(level)) throw new ServiceError(400, `seat ${player}: level must be 1, 2 or 3`);
       const def = this.registry.get(s.bot);
       return { player, name: s.name ?? def.name, armies, bot: def.id, instance: def.create({ level }), rng };
     });
 
     const match = Match.create({ map: req.map, mode, players: seats.map((s) => ({ name: s.name, armies: s.armies })) });
     const id = randomUUID().slice(0, 8);
-    const hosted: Hosted = { id, match, seats, maxRounds, orderTimeoutMs: req.orderTimeoutMs, round: new AbortController(), reports: [], resolving: false };
+    const hosted: Hosted = {
+      id,
+      match,
+      seats,
+      maxRounds,
+      orderTimeoutMs: req.orderTimeoutMs,
+      round: new AbortController(),
+      reports: [],
+      resolving: false,
+    };
     this.matches.set(id, hosted);
     this.forgetOldMatches();
     this.log(`match ${id}: ${match.state.map}, ${seats.map((s) => s.bot ?? 'remote').join(' / ')}`);
@@ -185,9 +225,15 @@ export class MatchService {
     for (const seat of h.seats) {
       if (!seat.instance || !match.state.players[seat.player].alive) continue;
       void playTurn(seat.instance, new LocalGameClient(match, seat.player), {
-        rng: seat.rng, checkpoint, signal,
-        onProblem: (problem) => this.log(`match ${h.id}: bot ${seat.bot} (player ${seat.player}) ${problem.kind} in round ${problem.round}`),
-      }).then(() => this.maybeResolve(h), () => {});
+        rng: seat.rng,
+        checkpoint,
+        signal,
+        onProblem: (problem) =>
+          this.log(`match ${h.id}: bot ${seat.bot} (player ${seat.player}) ${problem.kind} in round ${problem.round}`),
+      }).then(
+        () => this.maybeResolve(h),
+        () => {},
+      );
       // Rejections only come from aborts: the round was played without this bot.
     }
   }
@@ -206,7 +252,10 @@ export class MatchService {
       h.round.abort();
       const report = h.match.resolveRound({ lastRound: h.match.state.round >= h.maxRounds });
       h.reports.push(report);
-      if (report.status.over) this.log(`match ${h.id}: over after round ${report.round}, winners ${report.status.winners.join(', ') || 'none'}`);
+      if (report.status.over)
+        this.log(
+          `match ${h.id}: over after round ${report.round}, winners ${report.status.winners.join(', ') || 'none'}`,
+        );
     } finally {
       h.resolving = false;
     }

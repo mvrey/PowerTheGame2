@@ -31,18 +31,20 @@ export function legalOrders(sheet: OrderSheet): Order[] {
       places.add(p.loc);
       const cls = PIECES[p.type].cls;
       if (p.type === 'M') {
-        for (let node = 0; node < board.numNodes; node++) offer({ k: 'launch', army: a, from: p.loc, target: node, targetArmy: -1 });
-        for (const t of state.armies) if (t.alive) offer({ k: 'launch', army: a, from: p.loc, target: RESERVE, targetArmy: t.id });
+        for (let node = 0; node < board.numNodes; node++)
+          offer({ kind: 'launch', army: a, from: p.loc, target: node, targetArmy: -1 });
+        for (const t of state.armies)
+          if (t.alive) offer({ kind: 'launch', army: a, from: p.loc, target: RESERVE, targetArmy: t.id });
       } else if (cls && !p.moved && !p.fresh) {
         const targets = p.loc === RESERVE ? [board.hq[a]] : board.reach[cls][p.loc];
-        for (const to of targets) offer({ k: 'move', army: a, type: p.type, from: p.loc, to });
+        for (const to of targets) offer({ kind: 'move', army: a, type: p.type, from: p.loc, to });
       }
     }
-    for (const type of GROUP1) offer({ k: 'buy', army: a, type });
+    for (const type of GROUP1) offer({ kind: 'buy', army: a, type });
     for (const at of places) {
-      for (const type of GROUP1) offer({ k: 'up', army: a, type, at });
+      for (const type of GROUP1) offer({ kind: 'tradeUp', army: a, type, at });
       const recipe = cheapestMissileSpend(state, a, at);
-      if (recipe) offer({ k: 'mk', army: a, at, spend: recipe.spend, power: recipe.power });
+      if (recipe) offer({ kind: 'makeMissile', army: a, at, spend: recipe.spend, power: recipe.power });
     }
   }
   return out;

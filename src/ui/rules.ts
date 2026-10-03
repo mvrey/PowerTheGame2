@@ -2,7 +2,10 @@ import { h } from './dom';
 import { chip } from './icons';
 import { getLang } from './i18n';
 
-interface Section { title: string; items: string[] }
+interface Section {
+  title: string;
+  items: string[];
+}
 
 const ES: Section[] = [
   {
@@ -168,15 +171,39 @@ export function rulesContent(pieces: HTMLElement): HTMLElement[] {
   const lang = getLang();
   const sections = lang === 'es' ? ES : EN;
   const head = HEAD[lang];
-  pieces.prepend(h('thead', null, h('tr', null,
-    h('th', { colSpan: 2 }, head[0]), h('th', null, head[1]), h('th', null, head[2]), h('th'),
-    h('th', { colSpan: 2 }, head[0]), h('th', null, head[1]), h('th', null, head[2]))));
+  pieces.prepend(
+    h(
+      'thead',
+      null,
+      h(
+        'tr',
+        null,
+        h('th', { colSpan: 2 }, head[0]),
+        h('th', null, head[1]),
+        h('th', null, head[2]),
+        h('th'),
+        h('th', { colSpan: 2 }, head[0]),
+        h('th', null, head[1]),
+        h('th', null, head[2]),
+      ),
+    ),
+  );
   const out: HTMLElement[] = [];
   sections.forEach((section, i) => {
     out.push(h('h3', null, section.title), h('ul', null, ...section.items.map((item) => h('li', null, item))));
     if (i === 2) {
-      out.push(pieces, h('p.muted', null, chip('M', 3), ' ',
-        lang === 'es' ? 'Megamisil: no se mueve, poder 0, cuesta 100.' : 'Megamissile: does not move, power 0, costs 100.'));
+      out.push(
+        pieces,
+        h(
+          'p.muted',
+          null,
+          chip('M', 3),
+          ' ',
+          lang === 'es'
+            ? 'Megamisil: no se mueve, poder 0, cuesta 100.'
+            : 'Megamissile: does not move, power 0, costs 100.',
+        ),
+      );
     }
   });
   return out;

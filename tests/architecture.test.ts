@@ -23,16 +23,21 @@ function imports(file: string): string[] {
   const source = readFileSync(file, 'utf8');
   const out: string[] = [];
   for (const m of source.matchAll(/(?:import|export)[^'"]*?from\s+['"](\.[^'"]+)['"]/g))
-    out.push(relative(root, resolve(file, '..', m[1])).split(sep).join('/'));
+    out.push(
+      relative(root, resolve(file, '..', m[1]))
+        .split(sep)
+        .join('/'),
+    );
   return out;
 }
 
 const layer = (path: string) => path.split('/').slice(0, 2).join('/');
-const sources = (dir: string) => files(join(root, dir)).map((f) => ({ file: relative(root, f).split(sep).join('/'), deps: imports(f) }));
+const sources = (dir: string) =>
+  files(join(root, dir)).map((f) => ({ file: relative(root, f).split(sep).join('/'), deps: imports(f) }));
 
 describe('architecture', () => {
   it('only the API imports the engine', () => {
-    for (const dir of ['src/bots', 'src/ui', 'src/server', 'tools'])
+    for (const dir of ['src/bots', 'src/ui', 'src/server', 'src/cli', 'tools'])
       for (const { file, deps } of sources(dir))
         for (const dep of deps) expect(layer(dep), `${file} imports ${dep}`).not.toBe('src/engine');
   });

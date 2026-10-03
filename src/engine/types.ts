@@ -31,6 +31,21 @@ export const MISSILE_COST = 100;
 export const ORDERS_PER_ARMY = 5;
 export const MERC = -1;
 
+/** Number of players. With 2 each plays two allied armies; with 3 the fourth army is mercenary. */
+export type Mode = 2 | 3 | 4;
+export const MODES: readonly Mode[] = [2, 3, 4];
+export const isMode = (value: unknown): value is Mode => MODES.includes(value as Mode);
+
+/** The official time to write orders: 3 minutes, 6 in a two-player game (each commands two armies). */
+export const orderTimeMinutes = (mode: Mode): number => (mode === 2 ? 6 : 3);
+
+/** A read-only view of a value, all the way down. */
+export type DeepReadonly<T> = T extends (infer U)[]
+  ? readonly DeepReadonly<U>[]
+  : T extends object
+    ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+    : T;
+
 export interface Piece {
   id: number;
   type: PieceType;
@@ -85,7 +100,7 @@ export interface Strike {
 export interface GameState {
   /** Id of the map being played (see maps.ts). */
   map: string;
-  mode: 2 | 3 | 4;
+  mode: Mode;
   round: number;
   /** Player index of this round's referee. */
   referee: number;
@@ -100,16 +115,36 @@ export interface GameState {
   endReason: 'flags' | 'time' | null;
 }
 
-export type Order =
-  | { k: 'move'; army: number; type: PieceType; from: number; to: number }
-  | { k: 'buy'; army: number; type: PieceType }
-  | { k: 'up'; army: number; type: PieceType; at: number }
-  | { k: 'mk'; army: number; at: number; spend: Partial<Record<PieceType, number>>; power: number }
-  | { k: 'launch'; army: number; from: number; target: number; targetArmy: number };
+/** A state that must not be modified: the live game, or an order sheet's preview. */
+export type ReadonlyGameState = DeepReadonly<GameState>;
+export type ReadonlyPiece = DeepReadonly<Piece>;
 
-export type OrderError =
-  | 'dead' | 'notYours' | 'noPiece' | 'cantMove' | 'unreachable' | 'onlyHQ' | 'noPower'
-  | 'badType' | 'needThree' | 'tooWeak' | 'badSpend' | 'noMissile' | 'badTarget' | 'budget' | 'cancelled' | 'malformed';
+export type Order =
+  | { kind: 'move'; army: number; type: PieceType; from: number; to: number }
+  | { kind: 'buy'; army: number; type: PieceType }
+  | { kind: 'tradeUp'; army: number; type: PieceType; at: number }
+  | { kind: 'makeMissile'; army: number; at: number; spend: Partial<Record<PieceType, number>>; power: number }
+  | { kind: 'launch'; army: number; from: number; target: number; targetArmy: number };
+
+export const ORDER_ERRORS = [
+  'dead',
+  'notYours',
+  'noPiece',
+  'cantMove',
+  'unreachable',
+  'onlyHQ',
+  'noPower',
+  'badType',
+  'needThree',
+  'tooWeak',
+  'badSpend',
+  'noMissile',
+  'badTarget',
+  'budget',
+  'cancelled',
+  'malformed',
+] as const;
+export type OrderError = (typeof ORDER_ERRORS)[number];
 
 export interface Snapshot {
   pieces: { id: number; type: PieceType; army: number; loc: number }[];
@@ -118,18 +153,27 @@ export interface Snapshot {
   flags: number[][];
 }
 
-interface EvBase { snap?: Snapshot }
-export type RoundEvent = EvBase & (
-  | { t: 'turn'; player: number }
-  | { t: 'order'; player: number; index: number; order: Order; error: OrderError | null; merged?: boolean }
-  | { t: 'penalty'; player: number; army: number; paid: boolean }
-  | { t: 'strike'; army: number; target: number; targetArmy: number; destroyed: number; power: number }
-  | { t: 'bounce'; node: number; moves: { type: PieceType; army: number; to: number }[] }
-  | { t: 'standoff'; node: number; teams: number[] }
-  | { t: 'battle'; node: number; powers: { team: number; power: number }[]; winner: number;
-      captured: { type: PieceType; army: number; to: number }[]; value: number }
-  | { t: 'income'; army: number; amount: number; territories: number[] }
-  | { t: 'flag'; victim: number; captor: number; pieces: number; power: number }
-  | { t: 'out'; player: number }
-  | { t: 'end'; winners: number[]; reason: 'flags' | 'time' }
-);
+interface EvBase {
+  snap?: Snapshot;
+}
+export type RoundEvent = EvBase &
+  (
+    | { kind: 'turn'; player: number }
+    | { kind: 'order'; player: number; index: number; order: Order; error: OrderError | null; merged?: boolean }
+    | { kind: 'penalty'; player: number; army: number; paid: boolean }
+    | { kind: 'strike'; army: number; target: number; targetArmy: number; destroyed: number; power: number }
+    | { kind: 'bounce'; node: number; moves: { type: PieceType; army: number; to: number }[] }
+    | { kind: 'standoff'; node: number; teams: number[] }
+    | {
+        kind: 'battle';
+        node: number;
+        powers: { team: number; power: number }[];
+        winner: number;
+        captured: { type: PieceType; army: number; to: number }[];
+        value: number;
+      }
+    | { kind: 'income'; army: number; amount: number; territories: number[] }
+    | { kind: 'flag'; victim: number; captor: number; pieces: number; power: number }
+    | { kind: 'out'; player: number }
+    | { kind: 'end'; winners: number[]; reason: 'flags' | 'time' }
+  );

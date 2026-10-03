@@ -1,14 +1,30 @@
 import { NUM_ARMIES, RESERVE, boardOf } from './board';
 import { addPiece, mayCommand } from './game';
-import { GameState, MISSILE_COST, NO_ORIGIN, Order, OrderError, Piece, PieceType, PIECES } from './types';
+import {
+  GameState,
+  MISSILE_COST,
+  NO_ORIGIN,
+  Order,
+  OrderError,
+  Piece,
+  PieceType,
+  PIECES,
+  ReadonlyGameState,
+  ReadonlyPiece,
+} from './types';
 
-function findMovable(state: GameState, army: number, type: PieceType, from: number): Piece | undefined {
-  return state.pieces.find((p) => p.army === army && p.type === type && p.loc === from && !p.moved && !p.fresh);
+function findMovable<P extends ReadonlyPiece>(
+  pieces: readonly P[],
+  army: number,
+  type: PieceType,
+  from: number,
+): P | undefined {
+  return pieces.find((p) => p.army === army && p.type === type && p.loc === from && !p.moved && !p.fresh);
 }
 
-function at(state: GameState, army: number, type: PieceType, loc: number): Piece[] {
+function at<P extends ReadonlyPiece>(pieces: readonly P[], army: number, type: PieceType, loc: number): P[] {
   // Pieces that already moved are spent first, keeping unmoved ones free for later orders.
-  return state.pieces
+  return pieces
     .filter((p) => p.army === army && p.type === type && p.loc === loc)
     .sort((a, b) => Number(b.moved) - Number(a.moved));
 }
@@ -27,32 +43,43 @@ export function isWellFormed(order: unknown): order is Order {
   if (typeof order !== 'object' || order === null) return false;
   const o = order as Record<string, unknown>;
   if (!isInt(o.army)) return false;
-  switch (o.k) {
-    case 'move': return isType(o.type) && isInt(o.from) && isInt(o.to);
-    case 'buy': return isType(o.type);
-    case 'up': return isType(o.type) && isInt(o.at);
-    case 'mk':
-      return isInt(o.at) && isInt(o.power) && typeof o.spend === 'object' && o.spend !== null
-        && Object.entries(o.spend).every(([type, n]) => isType(type) && (n === undefined || isInt(n)));
-    case 'launch': return isInt(o.from) && isInt(o.target) && isInt(o.targetArmy);
-    default: return false;
+  switch (o.kind) {
+    case 'move':
+      return isType(o.type) && isInt(o.from) && isInt(o.to);
+    case 'buy':
+      return isType(o.type);
+    case 'tradeUp':
+      return isType(o.type) && isInt(o.at);
+    case 'makeMissile':
+      return (
+        isInt(o.at) &&
+        isInt(o.power) &&
+        typeof o.spend === 'object' &&
+        o.spend !== null &&
+        Object.entries(o.spend).every(([type, n]) => isType(type) && (n === undefined || isInt(n)))
+      );
+    case 'launch':
+      return isInt(o.from) && isInt(o.target) && isInt(o.targetArmy);
+    default:
+      return false;
   }
 }
 
 /** Returns null when `order` is legal for `player` in `state`. */
-export function checkOrder(state: GameState, player: number, order: Order): OrderError | null {
+export function checkOrder(state: ReadonlyGameState, player: number, order: Order): OrderError | null {
   if (!isWellFormed(order)) return 'malformed';
   const army = state.armies[order.army];
   const board = boardOf(state);
   if (!army || !army.alive) return 'dead';
   if (!mayCommand(state, player, order.army)) return 'notYours';
-  switch (order.k) {
+  switch (order.kind) {
     case 'move': {
       const def = PIECES[order.type];
       if (!def.cls) return 'cantMove';
-      if (!findMovable(state, order.army, order.type, order.from)) {
+      if (!findMovable(state.pieces, order.army, order.type, order.from)) {
         return state.pieces.some((p) => p.army === order.army && p.type === order.type && p.loc === order.from)
-          ? 'cantMove' : 'noPiece';
+          ? 'cantMove'
+          : 'noPiece';
       }
       if (order.from === RESERVE) return order.to === board.hq[order.army] ? null : 'onlyHQ';
       if (order.to < 0 || order.to >= board.numNodes) return 'unreachable';
@@ -61,24 +88,26 @@ export function checkOrder(state: GameState, player: number, order: Order): Orde
     case 'buy':
       if (PIECES[order.type].group !== 1) return 'badType';
       return army.power >= PIECES[order.type].power ? null : 'noPower';
-    case 'up':
+    case 'tradeUp':
       if (PIECES[order.type].group !== 1) return 'badType';
-      return at(state, order.army, order.type, order.at).length >= 3 ? null : 'needThree';
-    case 'mk': {
+      return at(state.pieces, order.army, order.type, order.at).length >= 3 ? null : 'needThree';
+    case 'makeMissile': {
       if (order.power < 0 || (order.power > 0 && order.at !== RESERVE)) return 'badSpend';
       if (order.power > army.power) return 'noPower';
       for (const [type, n] of Object.entries(order.spend)) {
         const count = n ?? 0;
         if (count < 0 || type === 'M') return 'badSpend';
-        if (at(state, order.army, type as PieceType, order.at).length < count) return 'noPiece';
+        if (at(state.pieces, order.army, type as PieceType, order.at).length < count) return 'noPiece';
       }
       return spendValue(order.spend, order.power) >= MISSILE_COST ? null : 'tooWeak';
     }
     case 'launch': {
-      if (!state.pieces.some((p) => p.army === order.army && p.type === 'M' && p.loc === order.from)) return 'noMissile';
+      if (!state.pieces.some((p) => p.army === order.army && p.type === 'M' && p.loc === order.from))
+        return 'noMissile';
       if (order.target === RESERVE) {
         return order.targetArmy >= 0 && order.targetArmy < NUM_ARMIES && state.armies[order.targetArmy].alive
-          ? null : 'badTarget';
+          ? null
+          : 'badTarget';
       }
       return order.target >= 0 && order.target < board.numNodes ? null : 'badTarget';
     }
@@ -93,9 +122,9 @@ function remove(state: GameState, gone: Piece[]): void {
 /** Applies an order already validated with checkOrder. */
 export function applyOrder(state: GameState, order: Order): void {
   const army = state.armies[order.army];
-  switch (order.k) {
+  switch (order.kind) {
     case 'move': {
-      const piece = findMovable(state, order.army, order.type, order.from)!;
+      const piece = findMovable(state.pieces, order.army, order.type, order.from)!;
       piece.from = order.from;
       piece.loc = order.to;
       piece.moved = true;
@@ -105,15 +134,15 @@ export function applyOrder(state: GameState, order: Order): void {
       army.power -= PIECES[order.type].power;
       addPiece(state, order.type, order.army, RESERVE);
       break;
-    case 'up': {
-      remove(state, at(state, order.army, order.type, order.at).slice(0, 3));
+    case 'tradeUp': {
+      remove(state, at(state.pieces, order.army, order.type, order.at).slice(0, 3));
       const big = addPiece(state, PIECES[order.type].up!, order.army, order.at);
       if (order.at !== RESERVE) markTraded(big);
       break;
     }
-    case 'mk': {
+    case 'makeMissile': {
       for (const [type, n] of Object.entries(order.spend))
-        remove(state, at(state, order.army, type as PieceType, order.at).slice(0, n ?? 0));
+        remove(state, at(state.pieces, order.army, type as PieceType, order.at).slice(0, n ?? 0));
       army.power -= order.power;
       const missile = addPiece(state, 'M', order.army, order.at);
       if (order.at !== RESERVE) markTraded(missile);
@@ -138,7 +167,9 @@ function markTraded(piece: Piece): void {
  * worth at least 100. Returns null when the location does not hold enough.
  */
 export function cheapestMissileSpend(
-  state: GameState, army: number, loc: number,
+  state: ReadonlyGameState,
+  army: number,
+  loc: number,
 ): { spend: Partial<Record<PieceType, number>>; power: number; total: number } | null {
   const items: { type: PieceType | 'P'; value: number }[] = [];
   for (const p of state.pieces)

@@ -1,24 +1,9 @@
 import { cloneState } from '../engine/game';
-import { Order } from '../engine/types';
 import { Bot, BotContext, Rng } from './bot';
 import { GameClient, movedPast } from './client';
 import { MatchStatus, SubmitResult } from './match';
-import { OrderSheet } from './orderSheet';
-import { OrderProblem } from './simulate';
-
-/** Mulberry32: small, fast, seedable. */
-export function makeRng(seed: number): Rng {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** A fresh seed from the clock and Math.random, for games that need not be replayed. */
-export const randomSeed = () => (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
+import { OrderProblem, OrderSheet } from './orderSheet';
+import { makeRng, randomSeed } from './random';
 
 /**
  * A checkpoint that pauses (with `breathe`) once at least `sliceMs` have gone by since the last
@@ -83,12 +68,7 @@ export async function playTurn(bot: Bot, client: GameClient, opts: TurnOptions =
 
   // Keep what is legal, in sequence, judged on the untouched state.
   const sheet = new OrderSheet(pristine, view.me);
-  const problems: OrderProblem[] = [];
-  orders.forEach((order, index) => {
-    const error = sheet.check(order as Order);
-    if (error) problems.push({ index, error });
-    else sheet.add(order as Order);
-  });
+  const problems = sheet.addAll(orders);
   if (problems.length) opts.onProblem?.({ kind: 'illegal', round: view.round, problems, orders });
 
   const result = await client.submit(sheet.orders);

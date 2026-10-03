@@ -1,6 +1,14 @@
 import { NUM_ARMIES, RESERVE, boardOf } from './board';
 import {
-  addPiece, armyStrength, livingArmies, playerFlags, playerStrength, seatOrder, snapshot, teamOf, withinBudget,
+  addPiece,
+  armyStrength,
+  livingArmies,
+  playerFlags,
+  playerStrength,
+  seatOrder,
+  snapshot,
+  teamOf,
+  withinBudget,
 } from './game';
 import { applyOrder, checkOrder } from './rules';
 import { GameState, MERC, NO_ORIGIN, Order, OrderError, Piece, PIECES, RoundEvent } from './types';
@@ -20,7 +28,10 @@ type Emit = (event: RoundEvent) => void;
 export function resolveRound(state: GameState, orders: Order[][], opts: ResolveOptions = {}): RoundEvent[] {
   const events: RoundEvent[] = [];
   const emit: Emit = opts.record
-    ? (event) => { if (opts.snapshots) event.snap = snapshot(state); events.push(event); }
+    ? (event) => {
+        if (opts.snapshots) event.snap = snapshot(state);
+        events.push(event);
+      }
     : () => {};
 
   executeOrders(state, orders, emit);
@@ -45,14 +56,14 @@ export function executionOrder(state: GameState): number[] {
 function executeOrders(state: GameState, orders: Order[][], emit: Emit): void {
   const merc = mercenaryQuotas(state, orders);
   for (const player of executionOrder(state)) {
-    emit({ t: 'turn', player });
+    emit({ kind: 'turn', player });
     const accepted: Order[] = [];
     let executed = 0;
     (orders[player] ?? []).forEach((order, index) => {
       let error: OrderError | null = withinBudget(state, player, accepted, order) ? null : 'budget';
       let merged = false;
       if (!error) accepted.push(order);
-      if (!error && order.k === 'move' && state.armies[order.army]?.controller === MERC) {
+      if (!error && order.kind === 'move' && state.armies[order.army]?.controller === MERC) {
         const key = mercKey(order);
         const destKey = key + '>' + order.to;
         const left = merc.quota.get(destKey) ?? 0;
@@ -64,16 +75,16 @@ function executeOrders(state: GameState, orders: Order[][], emit: Emit): void {
       if (!error && !merged) error = checkOrder(state, player, order);
       if (!error) {
         if (!merged) applyOrder(state, order);
-        if (order.k === 'launch') bump(state, player, 'missiles', 1);
+        if (order.kind === 'launch') bump(state, player, 'missiles', 1);
         executed++;
       }
-      emit({ t: 'order', player, index, order, error, merged });
+      emit({ kind: 'order', player, index, order, error, merged });
     });
     if (executed === 0) penalise(state, player, emit);
   }
 }
 
-function mercKey(order: Extract<Order, { k: 'move' }>): string {
+function mercKey(order: Extract<Order, { kind: 'move' }>): string {
   return `${order.army}:${order.type}:${order.from}`;
 }
 
@@ -87,7 +98,7 @@ function mercenaryQuotas(state: GameState, orders: Order[][]): { cancelled: Set<
   const wanted = new Map<string, Map<number, number[]>>(); // key -> dest -> count per player
   orders.forEach((list, player) => {
     for (const order of list ?? []) {
-      if (order.k !== 'move' || state.armies[order.army]?.controller !== MERC) continue;
+      if (order.kind !== 'move' || state.armies[order.army]?.controller !== MERC) continue;
       const key = mercKey(order);
       if (!wanted.has(key)) wanted.set(key, new Map());
       const dests = wanted.get(key)!;
@@ -99,7 +110,8 @@ function mercenaryQuotas(state: GameState, orders: Order[][]): { cancelled: Set<
   for (const [key, dests] of wanted) {
     const [army, type, from] = key.split(':');
     const available = state.pieces.filter(
-      (p) => p.army === Number(army) && p.type === type && p.loc === Number(from)).length;
+      (p) => p.army === Number(army) && p.type === type && p.loc === Number(from),
+    ).length;
     let need = 0;
     for (const [dest, counts] of dests) {
       const most = Math.max(...counts.filter((n) => n !== undefined));
@@ -115,17 +127,21 @@ function mercenaryQuotas(state: GameState, orders: Order[][]): { cancelled: Set<
 function penalise(state: GameState, player: number, emit: Emit): void {
   const armies = livingArmies(state, player);
   if (!armies.length) return;
-  const rich = armies.filter((a) => state.armies[a].power > 0).sort((a, b) => state.armies[b].power - state.armies[a].power)[0];
+  const rich = armies
+    .filter((a) => state.armies[a].power > 0)
+    .sort((a, b) => state.armies[b].power - state.armies[a].power)[0];
   if (rich !== undefined) {
     state.armies[rich].power--;
-    emit({ t: 'penalty', player, army: rich, paid: true });
+    emit({ kind: 'penalty', player, army: rich, paid: true });
     return;
   }
   const smallest = state.pieces
     .filter((p) => armies.includes(p.army) && p.type !== 'M')
-    .sort((a, b) => PIECES[a.type].power - PIECES[b.type].power || Number(b.loc === RESERVE) - Number(a.loc === RESERVE))[0];
+    .sort(
+      (a, b) => PIECES[a.type].power - PIECES[b.type].power || Number(b.loc === RESERVE) - Number(a.loc === RESERVE),
+    )[0];
   if (!smallest) {
-    emit({ t: 'penalty', player, army: armies[0], paid: false });
+    emit({ kind: 'penalty', player, army: armies[0], paid: false });
     return;
   }
   const army = state.armies[smallest.army];
@@ -139,7 +155,7 @@ function penalise(state: GameState, player: number, emit: Emit): void {
   } else {
     army.power += def.power - 1;
   }
-  emit({ t: 'penalty', player, army: smallest.army, paid: true });
+  emit({ kind: 'penalty', player, army: smallest.army, paid: true });
 }
 
 // ----------------------------------------------------------------- missiles
@@ -157,7 +173,9 @@ function detonate(state: GameState, emit: Emit): void {
   }
   for (const s of strikes) {
     const hit = state.pieces.filter(
-      (p) => doomed.has(p.id) && (s.target === RESERVE ? p.loc === RESERVE && p.army === s.targetArmy : p.loc === s.target));
+      (p) =>
+        doomed.has(p.id) && (s.target === RESERVE ? p.loc === RESERVE && p.army === s.targetArmy : p.loc === s.target),
+    );
     let power = 0;
     for (const p of hit) {
       power += PIECES[p.type].power;
@@ -170,13 +188,17 @@ function detonate(state: GameState, emit: Emit): void {
     }
     const ids = new Set(hit.map((p) => p.id));
     state.pieces = state.pieces.filter((p) => !ids.has(p.id));
-    emit({ t: 'strike', army: s.army, target: s.target, targetArmy: s.targetArmy, destroyed: hit.length, power });
+    emit({ kind: 'strike', army: s.army, target: s.target, targetArmy: s.targetArmy, destroyed: hit.length, power });
   }
 }
 
 // ---------------------------------------------------------------- conflicts
 
-interface Side { team: number; power: number; pieces: Piece[] }
+interface Side {
+  team: number;
+  power: number;
+  pieces: Piece[];
+}
 
 function sidesAt(state: GameState, node: number): Side[] {
   const sides: Side[] = [];
@@ -199,7 +221,7 @@ function occupiedNodes(state: GameState): number[] {
 
 /** Ties come first: tied forces that just moved in bounce back to where they came from, once per round. */
 function resolveTies(state: GameState, emit: Emit): void {
-  for (let changed = true; changed; ) {
+  for (let changed = true; changed;) {
     changed = false;
     for (const node of occupiedNodes(state)) {
       const sides = sidesAt(state, node);
@@ -213,7 +235,7 @@ function resolveTies(state: GameState, emit: Emit): void {
         p.loc = p.from;
         p.bounced = true;
       }
-      emit({ t: 'bounce', node, moves: movers.map((p) => ({ type: p.type, army: p.army, to: p.loc })) });
+      emit({ kind: 'bounce', node, moves: movers.map((p) => ({ type: p.type, army: p.army, to: p.loc })) });
       changed = true;
     }
   }
@@ -228,7 +250,7 @@ function resolveBattles(state: GameState, emit: Emit): void {
       const top = sides.filter((s) => s.power === sides[0].power);
       if (top.length > 1) {
         // Deadlocked forces stay put; whoever is left fights among themselves.
-        emit({ t: 'standoff', node, teams: top.map((s) => s.team) });
+        emit({ kind: 'standoff', node, teams: top.map((s) => s.team) });
         sides = sides.slice(top.length);
         continue;
       }
@@ -249,7 +271,7 @@ function resolveBattles(state: GameState, emit: Emit): void {
         bump(state, winner.team, 'captured', value);
         bump(state, winner.team, 'battlesWon', 1);
       }
-      emit({ t: 'battle', node, powers, winner: winner.team, captured, value });
+      emit({ kind: 'battle', node, powers, winner: winner.team, captured, value });
       break;
     }
   }
@@ -260,7 +282,8 @@ function receivingArmy(state: GameState, side: Side): number {
   const byArmy = new Map<number, number>();
   for (const p of side.pieces) byArmy.set(p.army, (byArmy.get(p.army) ?? 0) + PIECES[p.type].power);
   return [...byArmy.entries()].sort(
-    (a, b) => b[1] - a[1] || armyStrength(state, a[0]) - armyStrength(state, b[0]) || a[0] - b[0])[0][0];
+    (a, b) => b[1] - a[1] || armyStrength(state, a[0]) - armyStrength(state, b[0]) || a[0] - b[0],
+  )[0][0];
 }
 
 function capture(piece: Piece, army: number): void {
@@ -288,7 +311,7 @@ function collectPower(state: GameState, emit: Emit): void {
     if (!army.alive || !amount) continue;
     army.power += amount;
     if (army.controller !== MERC) bump(state, army.controller, 'income', amount);
-    emit({ t: 'income', army: army.id, amount, territories: [...held[army.id]] });
+    emit({ kind: 'income', army: army.id, amount, territories: [...held[army.id]] });
   }
 }
 
@@ -317,12 +340,12 @@ function captureFlags(state: GameState, emit: Emit): void {
     victim.flags = [];
     victim.alive = false;
     if (captor.controller !== MERC) bump(state, captor.controller, 'flags', 1);
-    emit({ t: 'flag', victim: victim.id, captor: captor.id, pieces, power });
+    emit({ kind: 'flag', victim: victim.id, captor: captor.id, pieces, power });
 
     const owner = victim.controller;
     if (owner !== MERC && !livingArmies(state, owner).length) {
       state.players[owner].alive = false;
-      emit({ t: 'out', player: owner });
+      emit({ kind: 'out', player: owner });
     }
   }
 }
@@ -348,7 +371,7 @@ function finishRound(state: GameState, lastRound: boolean, emit: Emit): void {
     state.endReason = 'time';
   }
   if (state.over) {
-    emit({ t: 'end', winners: state.winners, reason: state.endReason! });
+    emit({ kind: 'end', winners: state.winners, reason: state.endReason! });
     return;
   }
   state.round++;
@@ -366,5 +389,3 @@ function nextReferee(state: GameState): number {
 function bump(state: GameState, player: number, stat: keyof GameState['players'][number]['stats'], by: number): void {
   state.players[player].stats[stat] += by;
 }
-
-

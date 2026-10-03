@@ -1,10 +1,15 @@
-import { Board, BoardNode, PIECE_TYPES, PieceType, RESERVE, Snapshot } from '../api';
+import { ARMY_IDS, Board, BoardNode, PIECE_TYPES, PieceType, RESERVE, Snapshot } from '../api';
 import { svg } from './dom';
 import { Layout, Point, layout } from './geometry';
 import { ARMY_COLORS, isBig } from './icons';
 
 export type Mark = 'dest' | 'target' | 'source';
-export interface Arrow { from: number; to: number; army: number; kind: 'move' | 'launch' }
+export interface Arrow {
+  from: number;
+  to: number;
+  army: number;
+  kind: 'move' | 'launch';
+}
 
 interface Handlers {
   click(node: number): void;
@@ -15,17 +20,21 @@ interface Handlers {
 // Terrain per army seat: grassland, snow, forest, desert.
 const LAND = ['#86b85c', '#eef3f9', '#3c7a43', '#e2b257'];
 const BASE = ['#5f8f43', '#b9c6d6', '#2d5c34', '#b98a3a'];
-const TOKEN_W = 40, TOKEN_H = 30.6, GAP = 3;
+const TOKEN_W = 40,
+  TOKEN_H = 30.6,
+  GAP = 3;
 /** Tokens are drawn in a 34x26 box and scaled up to TOKEN_W. */
 const TOKEN_ZOOM = TOKEN_W / 34;
 
 function inset(polygon: Point[], by: number): string {
   const cx = polygon.reduce((s, p) => s + p[0], 0) / polygon.length;
   const cy = polygon.reduce((s, p) => s + p[1], 0) / polygon.length;
-  return polygon.map(([x, y]) => {
-    const d = Math.hypot(x - cx, y - cy);
-    return `${x - ((x - cx) / d) * by},${y - ((y - cy) / d) * by}`;
-  }).join(' ');
+  return polygon
+    .map(([x, y]) => {
+      const d = Math.hypot(x - cx, y - cy);
+      return `${x - ((x - cx) / d) * by},${y - ((y - cy) / d) * by}`;
+    })
+    .join(' ');
 }
 
 let instances = 0;
@@ -54,13 +63,14 @@ function terrain(lay: Layout, nodes: BoardNode[], uid: string): string {
       <path d="M0 0 10 5 0 10Z" fill="context-stroke"/>
     </marker>`;
   nodes.forEach((n) => {
-    if (n.kind === 'island') out += `<clipPath id="${uid}clip${n.idx}"><path d="${lay.shapes[n.idx].path}"/></clipPath>`;
+    if (n.kind === 'island')
+      out += `<clipPath id="${uid}clip${n.idx}"><path d="${lay.shapes[n.idx].path}"/></clipPath>`;
   });
-  for (let a = 0; a < 4; a++) out += `<clipPath id="${uid}terr${a}"><path d="${lay.territories[a]}"/></clipPath>`;
+  for (const a of ARMY_IDS) out += `<clipPath id="${uid}terr${a}"><path d="${lay.territories[a]}"/></clipPath>`;
   out += `</defs><rect width="${lay.width}" height="${lay.height}" fill="url(#${uid}sea)"/>
     <path d="${lay.voids}" fill="#070d18" opacity=".72"/>`;
 
-  for (let a = 0; a < 4; a++) {
+  for (const a of ARMY_IDS) {
     out += `<path d="${lay.territories[a]}" fill="#7cc4f2" opacity=".5"/>
       <g clip-path="url(#${uid}terr${a})"><path d="${lay.land[a]}" fill="${LAND[a]}" filter="url(#${uid}land${a})"/></g>`;
   }
@@ -94,7 +104,10 @@ export class BoardView {
   private flags = svg('g', { class: 'flags' });
   private fx = svg('g', { class: 'fx' });
 
-  constructor(board: Board, private handlers: Handlers) {
+  constructor(
+    board: Board,
+    private handlers: Handlers,
+  ) {
     this.lay = layout(board);
     this.nodes = board.nodes;
     this.hq = board.hq;
@@ -112,13 +125,26 @@ export class BoardView {
       el.addEventListener('mouseleave', () => handlers.hover(null));
       this.nodeEls.push(el);
       grid.append(el);
-      const text = svg('text', { x: shape.label[0], y: shape.label[1], class: 'lbl ' + node.kind }, handlers.label(node));
-      if (node.kind === 'sector' || node.kind === 'hq') text.style.fill = node.kind === 'hq' ? '#fff' : ARMY_COLORS[node.army].fill;
+      const text = svg(
+        'text',
+        { x: shape.label[0], y: shape.label[1], class: 'lbl ' + node.kind },
+        handlers.label(node),
+      );
+      if (node.kind === 'sector' || node.kind === 'hq')
+        text.style.fill = node.kind === 'hq' ? '#fff' : ARMY_COLORS[node.army].fill;
       labels.append(text);
     });
     const borders = svg('g', { class: 'borders' });
-    for (let a = 0; a < 4; a++)
-      borders.append(svg('path', { d: lay.territories[a], fill: 'none', stroke: ARMY_COLORS[a].fill, 'stroke-width': 5, 'stroke-linejoin': 'round' }));
+    for (const a of ARMY_IDS)
+      borders.append(
+        svg('path', {
+          d: lay.territories[a],
+          fill: 'none',
+          stroke: ARMY_COLORS[a].fill,
+          'stroke-width': 5,
+          'stroke-linejoin': 'round',
+        }),
+      );
     this.root.append(borders, grid, labels, this.flags, this.arrows, this.tokens, this.fx);
   }
 
@@ -128,7 +154,9 @@ export class BoardView {
   }
 
   relabel(): void {
-    this.root.querySelectorAll<SVGTextElement>('.labels text').forEach((el, i) => (el.textContent = this.handlers.label(this.nodes[i])));
+    this.root
+      .querySelectorAll<SVGTextElement>('.labels text')
+      .forEach((el, i) => (el.textContent = this.handlers.label(this.nodes[i])));
   }
 
   render(view: Snapshot): void {
@@ -144,7 +172,8 @@ export class BoardView {
     groups.forEach((map, node) => {
       if (!map.size) return;
       const list = [...map.values()].sort(
-        (a, b) => a.army - b.army || PIECE_TYPES.indexOf(b.type) - PIECE_TYPES.indexOf(a.type));
+        (a, b) => a.army - b.army || PIECE_TYPES.indexOf(b.type) - PIECE_TYPES.indexOf(a.type),
+      );
       this.layout(node, list);
     });
 
@@ -171,7 +200,9 @@ export class BoardView {
 
   private layout(node: number, list: { army: number; type: PieceType; count: number }[]): void {
     const { center, box } = this.lay.shapes[node];
-    let scale = 1, cols = 1, rows = 1;
+    let scale = 1,
+      cols = 1,
+      rows = 1;
     for (; scale > 0.45; scale -= 0.05) {
       cols = Math.max(1, Math.floor((box[0] + GAP) / ((TOKEN_W + GAP) * scale)));
       rows = Math.ceil(list.length / cols);
@@ -179,7 +210,8 @@ export class BoardView {
     }
     cols = Math.min(cols, list.length);
     rows = Math.ceil(list.length / cols);
-    const stepX = (TOKEN_W + GAP) * scale, stepY = (TOKEN_H + GAP) * scale;
+    const stepX = (TOKEN_W + GAP) * scale,
+      stepY = (TOKEN_H + GAP) * scale;
     list.forEach((item, i) => {
       const row = Math.floor(i / cols);
       const inRow = row === rows - 1 ? list.length - row * cols : cols;
@@ -200,13 +232,18 @@ export class BoardView {
   setArrows(list: Arrow[]): void {
     this.arrows.replaceChildren();
     for (const a of list) {
-      const from = this.lay.shapes[a.from].center, to = this.lay.shapes[a.to].center;
+      const from = this.lay.shapes[a.from].center,
+        to = this.lay.shapes[a.to].center;
       const len = Math.hypot(to[0] - from[0], to[1] - from[1]);
       if (len < 1) continue;
-      const ux = (to[0] - from[0]) / len, uy = (to[1] - from[1]) / len;
+      const ux = (to[0] - from[0]) / len,
+        uy = (to[1] - from[1]) / len;
       const trim = Math.min(26, len / 3);
       const attrs = {
-        x1: from[0] + ux * trim, y1: from[1] + uy * trim, x2: to[0] - ux * trim, y2: to[1] - uy * trim,
+        x1: from[0] + ux * trim,
+        y1: from[1] + uy * trim,
+        x2: to[0] - ux * trim,
+        y2: to[1] - uy * trim,
       };
       this.arrows.append(svg('line', { ...attrs, class: 'arrow-back' }));
       const line = svg('line', { ...attrs, class: 'arrow ' + a.kind, 'marker-end': `url(#${this.uid}head)` });
@@ -232,7 +269,11 @@ export class BoardView {
     const g = svg('g', { class: 'fx-' + kind, transform: `translate(${x} ${y})` });
     g.style.setProperty('--ms', ms + 'ms');
     if (kind === 'boom') {
-      g.append(svg('circle', { r: 70, class: 'flash' }), svg('circle', { r: 46, class: 'ring' }), svg('circle', { r: 30, class: 'core' }));
+      g.append(
+        svg('circle', { r: 70, class: 'flash' }),
+        svg('circle', { r: 46, class: 'ring' }),
+        svg('circle', { r: 30, class: 'core' }),
+      );
     } else if (kind === 'battle') {
       const star = Array.from({ length: 16 }, (_, i) => {
         const r = i % 2 ? 18 : 42;
@@ -261,10 +302,16 @@ function token(type: PieceType, army: number, count: number, x: number, y: numbe
   const c = ARMY_COLORS[army];
   const g = svg('g', { class: 'tok', transform: `translate(${x} ${y}) scale(${scale})` });
   const big = isBig(type);
-  g.append(svg('rect', {
-    width: 34, height: 26, rx: 6, fill: c.fill,
-    stroke: big ? '#ffe066' : c.dark, 'stroke-width': big ? 2.4 : 1.4,
-  }));
+  g.append(
+    svg('rect', {
+      width: 34,
+      height: 26,
+      rx: 6,
+      fill: c.fill,
+      stroke: big ? '#ffe066' : c.dark,
+      'stroke-width': big ? 2.4 : 1.4,
+    }),
+  );
   const use = svg('use', { href: '#ic-' + type, x: 3, y: 2.4, width: 28, height: 19.25 });
   use.style.fill = c.ink;
   g.append(use);

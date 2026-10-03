@@ -1,7 +1,8 @@
 import { Bot } from './bot';
 import { LocalGameClient } from './client';
-import { TurnProblem, makeRng, playTurn } from './driver';
+import { TurnProblem, playTurn } from './driver';
 import { Match, MatchStatus, RoundReport } from './match';
+import { seatRng } from './random';
 
 export interface HeadlessOptions {
   /** Seed for the bots' random numbers; each seat gets its own stream. */
@@ -16,10 +17,14 @@ export interface HeadlessOptions {
  * Plays `match` to the end with one bot per seat (`bots[player]`), without any interface.
  * Seats without a bot give no orders. Deterministic for a given seed.
  */
-export async function runHeadless(match: Match, bots: (Bot | null | undefined)[], opts: HeadlessOptions = {}): Promise<MatchStatus> {
+export async function runHeadless(
+  match: Match,
+  bots: (Bot | null | undefined)[],
+  opts: HeadlessOptions = {},
+): Promise<MatchStatus> {
   const seed = opts.seed ?? 1;
   const maxRounds = opts.maxRounds ?? 100;
-  const rngs = match.state.players.map((p) => makeRng(seed * 7919 + p.id * 104729));
+  const rngs = match.state.players.map((p) => seatRng(seed, p.id));
   while (!match.state.over) {
     for (const p of match.state.players) {
       const bot = bots[p.id];

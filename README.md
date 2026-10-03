@@ -83,12 +83,13 @@ Maps are plain text grids in `src/engine/maps.ts`. Each cell names the space it 
 - Rows and columns without sectors are drawn narrower; `cols` and `heights` override the sizes.
 
 Then add its name and description to `src/ui/i18n.ts` (`map.mymap`, `map.mymap.text`, in both
-languages). The board drawing, the movement tables and the bots all derive from the grid, and
-`tests/maps.test.ts` automatically checks the new map for soundness, fairness and full AI games.
+languages; `tests/i18n.test.ts` fails until both are there). The board drawing, the movement
+tables and the bots all derive from the grid, and `tests/maps.test.ts` automatically checks the
+new map for soundness, fairness and full AI games.
 
 ## Rules and assumptions
 
-`PLAN.md` lists the rules as implemented and the nine points where the rulebook is not explicit
+`PLAN.md` (in Spanish) lists the rules as implemented and the nine points where the rulebook is not explicit
 and a decision had to be made (for example, Megamissiles detonate once everyone has moved).
 
 ## Write your own bot
@@ -125,16 +126,19 @@ src/engine/   Pure rules: maps, board graph, orders, round resolution (internal)
 src/api/      The engine's public API: Match, views, order sheets, legal orders, simulation,
               the bot contract, local and HTTP clients
 src/bots/     Bot registry; the generals; example bots (Rookie, Greedy)
-src/ui/       Browser host: SVG board, game screen, menus, audio, languages, saving
+src/ui/       Browser host: SVG board, menus, audio, languages, saving
+src/ui/game/  The game screen: planning, playback, panels, dialogs
 src/server/   HTTP server hosting matches for remote bots
-tests/        Vitest: rules, API, bots, maps, HTTP server, architecture boundaries
+src/cli/      Command-line arguments shared by the server and the tools
+tests/        Vitest: rules, API, bots, maps, translations, HTTP server, architecture boundaries
 tools/        arena.ts (tournaments), remote-bot.ts (play on a server), render-midi.cjs (MIDI to WAV)
 examples/     http_bot.py, a bot in Python over HTTP
 Audio/        Original assets (WAV and MIDI)
 public/audio/ The same, converted to MP3 for the browser
 ```
 
-Commands: `npm test`, `npm run build`, `npm run arena`, `npm run server`, `npm run bot`.
+Commands: `npm test`, `npm run build`, `npm run lint`, `npm run format`, `npm run arena`,
+`npm run server`, `npm run bot`.
 Adding `#autoplay` to the URL makes an AI play your seat, which is handy for debugging.
 
 The music was produced by rendering the MIDI files with `js-synthesizer` and the GeneralUser GS

@@ -25,11 +25,14 @@ export interface BoardNode {
 export const ARMY_LETTERS = ['G', 'B', 'Y', 'R'] as const;
 export const ARMY_KEYS = ['green', 'blue', 'yellow', 'red'] as const;
 export const NUM_ARMIES = 4;
+/** Army ids, 0..NUM_ARMIES-1, in seat order. */
+export const ARMY_IDS: readonly number[] = Array.from({ length: NUM_ARMIES }, (_, army) => army);
 export const RESERVE = -1;
 
-const CLASSES: MoveClass[] = ['inf', 'tank', 'air', 'naval'];
-const RANGE: Record<MoveClass, number> = { inf: 2, tank: 3, air: 5, naval: 1 };
 export type ByClass<T> = Record<MoveClass, T>;
+const CLASSES: MoveClass[] = ['inf', 'tank', 'air', 'naval'];
+/** Spaces a unit of each class may cross in one move. */
+export const MOVE_RANGE: Readonly<ByClass<number>> = { inf: 2, tank: 3, air: 5, naval: 1 };
 
 /** The graph of one map. */
 export interface Board {
@@ -72,7 +75,14 @@ function parse(map: MapDef): { nodes: BoardNode[]; grid: number[][] } {
   for (const [id, cells] of cellsOf) {
     let match: RegExpMatchArray | null;
     if ((match = id.match(/^([GBYR])(\d+)$/))) {
-      drafts.push({ id, kind: 'sector', army: ARMY_LETTERS.indexOf(match[1] as 'G'), num: Number(match[2]), coastal: false, cells });
+      drafts.push({
+        id,
+        kind: 'sector',
+        army: ARMY_LETTERS.indexOf(match[1] as 'G'),
+        num: Number(match[2]),
+        coastal: false,
+        cells,
+      });
     } else if ((match = id.match(/^HQ([GBYR])$/))) {
       drafts.push({ id, kind: 'hq', army: ARMY_LETTERS.indexOf(match[1] as 'G'), num: -1, coastal: false, cells });
     } else if (/^I\w+$/.test(id)) {
@@ -87,7 +97,7 @@ function parse(map: MapDef): { nodes: BoardNode[]; grid: number[][] } {
   const rank = { sector: 0, hq: 1, island: 2, sea: 3 };
   drafts.sort((a, b) => rank[a.kind] - rank[b.kind] || a.army - b.army || (a.kind === 'island' ? 0 : a.num - b.num));
   const nodes = drafts.map((d, idx): BoardNode => ({ ...d, idx, num: d.kind === 'sector' ? d.num : -1 }));
-  for (let a = 0; a < NUM_ARMIES; a++) {
+  for (const a of ARMY_IDS) {
     if (!nodes.some((n) => n.kind === 'hq' && n.army === a) || !nodes.some((n) => n.kind === 'sector' && n.army === a))
       throw new Error(`Map ${map.id}: army ${ARMY_LETTERS[a]} needs an HQ and at least one sector`);
   }
@@ -99,16 +109,18 @@ function parse(map: MapDef): { nodes: BoardNode[]; grid: number[][] } {
 function build(map: MapDef): Board {
   const { nodes, grid } = parse(map);
   const links = nodes.map(() => new Set<number>());
-  grid.forEach((row, y) => row.forEach((a, x) => {
-    if (a < 0) return;
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const b = grid[y + dy]?.[x + dx] ?? -1;
-        if (b < 0 || b === a || (nodes[a].kind === 'sea' && nodes[b].kind === 'sea')) continue;
-        links[a].add(b);
+  grid.forEach((row, y) =>
+    row.forEach((a, x) => {
+      if (a < 0) return;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const b = grid[y + dy]?.[x + dx] ?? -1;
+          if (b < 0 || b === a || (nodes[a].kind === 'sea' && nodes[b].kind === 'sea')) continue;
+          links[a].add(b);
+        }
       }
-    }
-  }));
+    }),
+  );
   const adj = links.map((set) => [...set].sort((a, b) => a - b));
   for (const n of nodes) n.coastal = n.kind === 'sector' && adj[n.idx].some((b) => nodes[b].kind === 'sea');
 
@@ -119,7 +131,7 @@ function build(map: MapDef): Board {
   const reachFrom = (cls: MoveClass, from: number): number[] => {
     const dist = new Map<number, number>([[from, 0]]);
     let frontier = [from];
-    for (let d = 1; d <= RANGE[cls]; d++) {
+    for (let d = 1; d <= MOVE_RANGE[cls]; d++) {
       const next: number[] = [];
       for (const u of frontier) {
         // Ground units must stop when they enter an island or an HQ.
@@ -140,23 +152,25 @@ function build(map: MapDef): Board {
     Object.fromEntries(CLASSES.map((cls) => [cls, make(cls)])) as ByClass<T>;
 
   const reach = perClass((cls) => nodes.map((n) => (enter(cls, n.idx) ? reachFrom(cls, n.idx) : [])));
-  const rounds = perClass((cls) => nodes.map((n) => {
-    const d = new Array<number>(nodes.length).fill(Infinity);
-    if (!enter(cls, n.idx)) return d;
-    d[n.idx] = 0;
-    let frontier = [n.idx];
-    for (let r = 1; frontier.length; r++) {
-      const next: number[] = [];
-      for (const u of frontier)
-        for (const v of reach[cls][u])
-          if (d[v] === Infinity) {
-            d[v] = r;
-            next.push(v);
-          }
-      frontier = next;
-    }
-    return d;
-  }));
+  const rounds = perClass((cls) =>
+    nodes.map((n) => {
+      const d = new Array<number>(nodes.length).fill(Infinity);
+      if (!enter(cls, n.idx)) return d;
+      d[n.idx] = 0;
+      let frontier = [n.idx];
+      for (let r = 1; frontier.length; r++) {
+        const next: number[] = [];
+        for (const u of frontier)
+          for (const v of reach[cls][u])
+            if (d[v] === Infinity) {
+              d[v] = r;
+              next.push(v);
+            }
+        frontier = next;
+      }
+      return d;
+    }),
+  );
 
   const reachSet = perClass((cls) => reach[cls].map((list) => new Set(list)));
   return {
@@ -165,8 +179,8 @@ function build(map: MapDef): Board {
     numNodes: nodes.length,
     grid,
     byId: Object.fromEntries(nodes.map((n) => [n.id, n.idx])),
-    hq: [0, 1, 2, 3].map((a) => nodes.find((n) => n.kind === 'hq' && n.army === a)!.idx),
-    territory: [0, 1, 2, 3].map((a) => nodes.filter((n) => n.kind === 'sector' && n.army === a).map((n) => n.idx)),
+    hq: ARMY_IDS.map((a) => nodes.find((n) => n.kind === 'hq' && n.army === a)!.idx),
+    territory: ARMY_IDS.map((a) => nodes.filter((n) => n.kind === 'sector' && n.army === a).map((n) => n.idx)),
     adj,
     reach,
     rounds,
@@ -190,4 +204,3 @@ export function boardOf(state: { map: string }): Board {
 }
 
 export { DEFAULT_MAP };
-

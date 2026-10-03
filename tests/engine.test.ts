@@ -5,7 +5,10 @@ import { resolveRound } from '../src/engine/resolve';
 import { applyOrder, checkOrder, cheapestMissileSpend } from '../src/engine/rules';
 import { GameState, Order, PieceType } from '../src/engine/types';
 
-const G = 0, B = 1, Y = 2, R = 3;
+const G = 0,
+  B = 1,
+  Y = 2,
+  R = 3;
 const board = getBoard('classic');
 const { adj: ADJ, hq: HQ, nodes: NODES, byId: N, numNodes: NUM_NODES, reach: REACH, territory: TERRITORY } = board;
 const canReach = board.canReach;
@@ -24,7 +27,9 @@ function bare(state = game4()): GameState {
 const put = (s: GameState, type: PieceType, army: number, node: string | number) =>
   addPiece(s, type, army, typeof node === 'string' ? N[node] : node);
 const move = (army: number, type: PieceType, from: string | number, to: string | number): Order => ({
-  k: 'move', army, type,
+  kind: 'move',
+  army,
+  type,
   from: typeof from === 'string' ? N[from] : from,
   to: typeof to === 'string' ? N[to] : to,
 });
@@ -117,8 +122,8 @@ describe('orders', () => {
     addPiece(s, 'S', Y, RESERVE);
     addPiece(s, 'S', Y, RESERVE);
     const orders: Order[] = [
-      { k: 'buy', army: Y, type: 'S' },
-      { k: 'up', army: Y, type: 'S', at: RESERVE },
+      { kind: 'buy', army: Y, type: 'S' },
+      { kind: 'tradeUp', army: Y, type: 'S', at: RESERVE },
       move(Y, 'R', RESERVE, 'HQY'),
     ];
     for (const o of orders) {
@@ -136,9 +141,11 @@ describe('orders', () => {
   });
   it('pieces moved together can be traded, but the new piece cannot move', () => {
     const s = bare();
-    put(s, 'F', Y, 'Y4'); put(s, 'F', Y, 'Y4'); put(s, 'F', Y, 'Y8');
+    put(s, 'F', Y, 'Y4');
+    put(s, 'F', Y, 'Y4');
+    put(s, 'F', Y, 'Y8');
     applyOrder(s, move(Y, 'F', 'Y8', 'Y4'));
-    const up: Order = { k: 'up', army: Y, type: 'F', at: N.Y4 };
+    const up: Order = { kind: 'tradeUp', army: Y, type: 'F', at: N.Y4 };
     expect(checkOrder(s, 2, up)).toBeNull();
     applyOrder(s, up);
     expect(count(s, Y, N.Y4, 'B')).toBe(1);
@@ -146,15 +153,21 @@ describe('orders', () => {
   });
   it('finds the cheapest megamissile recipe', () => {
     const s = bare();
-    put(s, 'C', Y, 'Y4'); put(s, 'H', Y, 'Y4'); put(s, 'R', Y, 'Y4'); put(s, 'B', Y, 'Y4'); put(s, 'S', Y, 'Y4');
+    put(s, 'C', Y, 'Y4');
+    put(s, 'H', Y, 'Y4');
+    put(s, 'R', Y, 'Y4');
+    put(s, 'B', Y, 'Y4');
+    put(s, 'S', Y, 'Y4');
     const r = cheapestMissileSpend(s, Y, N.Y4)!;
     expect(r.total).toBe(100);
     expect(r.spend).toEqual({ C: 1, H: 1, R: 1 });
     s.pieces = [];
-    put(s, 'C', Y, 'Y4'); put(s, 'B', Y, 'Y4');
+    put(s, 'C', Y, 'Y4');
+    put(s, 'B', Y, 'Y4');
     expect(cheapestMissileSpend(s, Y, N.Y4)).toBeNull();
     s.armies[Y].power = 30;
-    addPiece(s, 'C', Y, RESERVE); addPiece(s, 'B', Y, RESERVE);
+    addPiece(s, 'C', Y, RESERVE);
+    addPiece(s, 'B', Y, RESERVE);
     const rv = cheapestMissileSpend(s, Y, RESERVE)!;
     expect(rv.total).toBe(100);
     expect(rv.power).toBe(25);
@@ -164,24 +177,27 @@ describe('orders', () => {
 describe('round resolution', () => {
   it('the stronger force captures the weaker one into its Reserve', () => {
     const s = bare();
-    put(s, 'T', Y, 'Y4'); put(s, 'D', R, 'IS');
+    put(s, 'T', Y, 'Y4');
+    put(s, 'D', R, 'IS');
     const orders: Order[][] = [idle(s, G), idle(s, B), [move(Y, 'T', 'Y4', 'Y3')], [move(R, 'D', 'IS', 'Y3')]];
     const events = resolveRound(s, orders, { record: true });
     expect(count(s, R, RESERVE, 'T')).toBe(1);
     expect(count(s, R, N.Y3, 'D')).toBe(1);
-    expect(events.some((e) => e.t === 'battle' && e.winner === 3 && e.value === 3)).toBe(true);
+    expect(events.some((e) => e.kind === 'battle' && e.winner === 3 && e.value === 3)).toBe(true);
     expect(s.players[3].stats.captured).toBe(3);
   });
   it('equal forces that both moved bounce back', () => {
     const s = bare();
-    put(s, 'F', Y, 'Y4'); put(s, 'F', R, 'R0');
+    put(s, 'F', Y, 'Y4');
+    put(s, 'F', R, 'R0');
     resolveRound(s, [idle(s, G), idle(s, B), [move(Y, 'F', 'Y4', 'IX')], [move(R, 'F', 'R0', 'IX')]]);
     expect(count(s, Y, N.Y4, 'F')).toBe(1);
     expect(count(s, R, N.R0, 'F')).toBe(1);
   });
   it('only the pieces that moved bounce', () => {
     const s = bare();
-    put(s, 'F', Y, 'IX'); put(s, 'F', R, 'R0');
+    put(s, 'F', Y, 'IX');
+    put(s, 'F', R, 'R0');
     put(s, 'S', Y, 'Y8');
     resolveRound(s, [idle(s, G), idle(s, B), [move(Y, 'S', 'Y8', 'Y4')], [move(R, 'F', 'R0', 'IX')]]);
     expect(count(s, Y, N.IX, 'F')).toBe(1);
@@ -189,7 +205,9 @@ describe('round resolution', () => {
   });
   it('a piece bouncing home into an equal invader makes the invader withdraw', () => {
     const s = bare();
-    put(s, 'F', Y, 'Y0'); put(s, 'F', R, 'R0'); put(s, 'F', G, 'G0');
+    put(s, 'F', Y, 'Y0');
+    put(s, 'F', R, 'R0');
+    put(s, 'F', G, 'G0');
     // Y and R tie on X; G moves into Y0, where the bounced Y fighter returns.
     resolveRound(s, [[move(G, 'F', 'G0', 'Y0')], idle(s, B), [move(Y, 'F', 'Y0', 'IX')], [move(R, 'F', 'R0', 'IX')]]);
     expect(count(s, Y, N.Y0, 'F')).toBe(1);
@@ -198,32 +216,46 @@ describe('round resolution', () => {
   });
   it('three sides: the two strongest tie and withdraw, the weakest stays', () => {
     const s = bare();
-    put(s, 'F', Y, 'Y0'); put(s, 'F', R, 'R0'); put(s, 'S', G, 'G0');
+    put(s, 'F', Y, 'Y0');
+    put(s, 'F', R, 'R0');
+    put(s, 'S', G, 'G0');
     resolveRound(s, [[move(G, 'S', 'G0', 'IX')], idle(s, B), [move(Y, 'F', 'Y0', 'IX')], [move(R, 'F', 'R0', 'IX')]]);
     expect(count(s, G, N.IX, 'S')).toBe(1);
     expect(count(s, Y, N.Y0, 'F')).toBe(1);
   });
   it('three sides: the strongest beats two tied weaker ones', () => {
     const s = bare();
-    put(s, 'F', Y, 'Y0'); put(s, 'F', R, 'R0'); put(s, 'D', G, 'G0');
+    put(s, 'F', Y, 'Y0');
+    put(s, 'F', R, 'R0');
+    put(s, 'D', G, 'G0');
     resolveRound(s, [[move(G, 'D', 'G0', 'IX')], idle(s, B), [move(Y, 'F', 'Y0', 'IX')], [move(R, 'F', 'R0', 'IX')]]);
     expect(count(s, G, RESERVE, 'F')).toBe(2);
   });
   it('collects one Power per enemy territory occupied, none for islands or eliminated armies', () => {
     const s = bare();
-    put(s, 'F', Y, 'R5'); put(s, 'F', Y, 'R4'); put(s, 'F', Y, 'B3'); put(s, 'F', Y, 'IX'); put(s, 'F', Y, 'G0');
-    s.armies[G].alive = false; s.players[0].alive = false;
+    put(s, 'F', Y, 'R5');
+    put(s, 'F', Y, 'R4');
+    put(s, 'F', Y, 'B3');
+    put(s, 'F', Y, 'IX');
+    put(s, 'F', Y, 'G0');
+    s.armies[G].alive = false;
+    s.players[0].alive = false;
     resolveRound(s, [[], idle(s, B), idle(s, Y), idle(s, R)]);
     expect(s.armies[Y].power).toBe(2);
   });
   it('captures a flag only with infantry, and takes everything', () => {
     const s = bare();
-    put(s, 'B', Y, 'R8'); put(s, 'S', Y, 'R7');
-    put(s, 'T', R, 'HQR'); put(s, 'D', R, 'S12'); addPiece(s, 'F', R, RESERVE);
+    put(s, 'B', Y, 'R8');
+    put(s, 'S', Y, 'R7');
+    put(s, 'T', R, 'HQR');
+    put(s, 'D', R, 'S12');
+    addPiece(s, 'F', R, RESERVE);
     s.armies[R].power = 4;
-    const noInf = resolveRound(s, [idle(s, G), idle(s, B), [move(Y, 'B', 'R8', 'HQR')], [move(R, 'D', 'S12', 'IW')]], { record: true });
+    const noInf = resolveRound(s, [idle(s, G), idle(s, B), [move(Y, 'B', 'R8', 'HQR')], [move(R, 'D', 'S12', 'IW')]], {
+      record: true,
+    });
     expect(s.armies[R].alive).toBe(true);
-    expect(noInf.some((e) => e.t === 'flag')).toBe(false);
+    expect(noInf.some((e) => e.kind === 'flag')).toBe(false);
     expect(count(s, Y, RESERVE, 'T')).toBe(1);
     resolveRound(s, [idle(s, G), idle(s, B), [move(Y, 'S', 'R7', 'HQR')], [move(R, 'D', 'IW', 'S12')]]);
     expect(s.armies[R].alive).toBe(false);
@@ -237,10 +269,16 @@ describe('round resolution', () => {
   it('a megamissile destroys everything on its target except the flag', () => {
     const s = bare();
     addPiece(s, 'M', Y, RESERVE);
-    put(s, 'C', R, 'HQR'); put(s, 'S', Y, 'R8');
-    const launch: Order = { k: 'launch', army: Y, from: RESERVE, target: N.HQR, targetArmy: -1 };
+    put(s, 'C', R, 'HQR');
+    put(s, 'S', Y, 'R8');
+    const launch: Order = { kind: 'launch', army: Y, from: RESERVE, target: N.HQR, targetArmy: -1 };
     s.armies[R].power = 2;
-    resolveRound(s, [idle(s, G), idle(s, B), [launch, move(Y, 'S', 'R8', 'HQR')], [{ k: 'buy', army: R, type: 'S' }]]);
+    resolveRound(s, [
+      idle(s, G),
+      idle(s, B),
+      [launch, move(Y, 'S', 'R8', 'HQR')],
+      [{ kind: 'buy', army: R, type: 'S' }],
+    ]);
     expect(s.pieces.filter((p) => p.loc === N.HQR).length).toBe(0);
     expect(s.armies[R].alive).toBe(true);
     expect(s.pieces.some((p) => p.type === 'M')).toBe(false);
@@ -249,9 +287,10 @@ describe('round resolution', () => {
   it('a megamissile can wipe a Reserve, Power units included', () => {
     const s = bare();
     addPiece(s, 'M', Y, RESERVE);
-    addPiece(s, 'C', R, RESERVE); addPiece(s, 'F', R, RESERVE);
+    addPiece(s, 'C', R, RESERVE);
+    addPiece(s, 'F', R, RESERVE);
     s.armies[R].power = 7;
-    const launch: Order = { k: 'launch', army: Y, from: RESERVE, target: RESERVE, targetArmy: R };
+    const launch: Order = { kind: 'launch', army: Y, from: RESERVE, target: RESERVE, targetArmy: R };
     resolveRound(s, [idle(s, G), idle(s, B), [launch], [move(R, 'F', RESERVE, 'HQR')]]);
     expect(reserveOf(s, R).length).toBe(0);
     expect(s.armies[R].power).toBe(0);
@@ -259,7 +298,8 @@ describe('round resolution', () => {
   });
   it('an unlaunched megamissile is worth nothing and gets captured', () => {
     const s = bare();
-    put(s, 'M', Y, 'Y0'); put(s, 'S', R, 'IX');
+    put(s, 'M', Y, 'Y0');
+    put(s, 'S', R, 'IX');
     resolveRound(s, [idle(s, G), idle(s, B), idle(s, Y), [move(R, 'S', 'IX', 'Y0')]]);
     expect(count(s, R, RESERVE, 'M')).toBe(1);
   });
@@ -288,7 +328,11 @@ describe('round resolution', () => {
   it('on the time limit the strongest player wins', () => {
     const s = game4();
     s.armies[B].power = 5;
-    resolveRound(s, [0, 1, 2, 3].map((a) => [move(a, 'S', HQ[a], TERRITORY[a][8])]), { lastRound: true });
+    resolveRound(
+      s,
+      [0, 1, 2, 3].map((a) => [move(a, 'S', HQ[a], TERRITORY[a][8])]),
+      { lastRound: true },
+    );
     expect(s.over).toBe(true);
     expect(s.winners).toEqual([1]);
     expect(s.endReason).toBe('time');
@@ -296,25 +340,38 @@ describe('round resolution', () => {
   it('rotates the referee clockwise', () => {
     const s = game4();
     expect(s.referee).toBe(0);
-    resolveRound(s, [0, 1, 2, 3].map((a) => [move(a, 'S', HQ[a], TERRITORY[a][8])]));
+    resolveRound(
+      s,
+      [0, 1, 2, 3].map((a) => [move(a, 'S', HQ[a], TERRITORY[a][8])]),
+    );
     expect(s.referee).toBe(1);
     expect(s.round).toBe(2);
   });
 });
 
 describe('variants', () => {
-  const two = () => newGame({
-    mode: 2,
-    players: [{ name: 'N', armies: [G, B] }, { name: 'S', armies: [Y, R] }],
-  });
-  const three = () => bare(newGame({
-    mode: 3,
-    players: [G, B, Y].map((a) => ({ name: 'P' + a, armies: [a] })),
-  }));
+  const two = () =>
+    newGame({
+      mode: 2,
+      players: [
+        { name: 'N', armies: [G, B] },
+        { name: 'S', armies: [Y, R] },
+      ],
+    });
+  const three = () =>
+    bare(
+      newGame({
+        mode: 3,
+        players: [G, B, Y].map((a) => ({ name: 'P' + a, armies: [a] })),
+      }),
+    );
 
   it('two players: allied armies add up and never fight each other', () => {
     const s = bare(two());
-    put(s, 'F', Y, 'Y0'); put(s, 'T', R, 'R0'); put(s, 'F', G, 'IX'); put(s, 'S', G, 'IX');
+    put(s, 'F', Y, 'Y0');
+    put(s, 'T', R, 'R0');
+    put(s, 'F', G, 'IX');
+    put(s, 'S', G, 'IX');
     put(s, 'S', B, 'B8');
     resolveRound(s, [[move(B, 'S', 'B8', 'B4')], [move(Y, 'F', 'Y0', 'IX'), move(R, 'T', 'R0', 'IX')]]);
     expect(count(s, Y, RESERVE)).toBe(2);
@@ -327,7 +384,7 @@ describe('variants', () => {
     const ev = resolveRound(s, [[move(G, 'S', HQ[G], 'G8')], [...six, move(R, 'S', HQ[R], 'R8')]], { record: true });
     expect(count(s, Y, N.Y8)).toBe(5);
     expect(count(s, R, N.R8)).toBe(1);
-    expect(ev.filter((e) => e.t === 'order' && e.error === 'budget').length).toBe(1);
+    expect(ev.filter((e) => e.kind === 'order' && e.error === 'budget').length).toBe(1);
   });
   it('three players: conflicting mercenary orders cancel, matching ones merge', () => {
     let s = three();
@@ -339,14 +396,16 @@ describe('variants', () => {
     resolveRound(s, [[move(R, 'T', 'R4', 'R0')], [move(R, 'T', 'R4', 'R0')], idle(s, Y)]);
     expect(count(s, R, N.R0, 'T')).toBe(1);
     s = three();
-    put(s, 'T', R, 'R4'); put(s, 'T', R, 'R4');
+    put(s, 'T', R, 'R4');
+    put(s, 'T', R, 'R4');
     resolveRound(s, [[move(R, 'T', 'R4', 'R0')], [move(R, 'T', 'R4', 'R8')], idle(s, Y)]);
     expect(count(s, R, N.R0, 'T')).toBe(1);
     expect(count(s, R, N.R8, 'T')).toBe(1);
   });
   it('three players: mercenary captures go to the mercenary Reserve', () => {
     const s = three();
-    put(s, 'D', R, 'R5'); put(s, 'F', Y, 'Y3');
+    put(s, 'D', R, 'R5');
+    put(s, 'F', Y, 'Y3');
     resolveRound(s, [idle(s, G), idle(s, B), [move(Y, 'F', 'Y3', 'R5')]]);
     expect(count(s, R, RESERVE, 'F')).toBe(1);
   });

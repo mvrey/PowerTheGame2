@@ -32,6 +32,8 @@ export interface Bot {
 
 /** Difficulty chosen in the menus: 1 Recruit, 2 Captain, 3 General. Bots may ignore it. */
 export type BotLevel = 1 | 2 | 3;
+export const BOT_LEVELS: readonly BotLevel[] = [1, 2, 3];
+export const isBotLevel = (value: unknown): value is BotLevel => BOT_LEVELS.includes(value as BotLevel);
 
 export interface BotOptions {
   level: BotLevel;

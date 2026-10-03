@@ -9,12 +9,12 @@
 // The same thing works for a bot written in any language: see BOTS.md for the endpoints.
 
 import { HttpGameClient, createRemoteMatch, playMatch } from '../src/api';
-import { bots } from '../src/bots';
-import { botSpec, parseArgs } from './args';
+import { DEFAULT_BOT_ID, bots } from '../src/bots';
+import { botSpec, parseArgs } from '../src/cli/args';
 
 const args = parseArgs();
 const server = args.get('server') ?? 'http://localhost:8787';
-const me = botSpec(args.get('bot') ?? 'okoye');
+const me = botSpec(args.get('bot') ?? DEFAULT_BOT_ID);
 const bot = bots.create(me.id, { level: me.level });
 
 let matchId = args.get('match');
@@ -35,7 +35,14 @@ if (!matchId) {
 
 const client = new HttpGameClient(server, matchId, player, token);
 const end = await playMatch(bot, client, {
-  onProblem: (problem) => console.warn(`round ${problem.round}: ${problem.kind}`, problem.kind === 'crashed' ? problem.error : ''),
+  onProblem: (problem) =>
+    console.warn(`round ${problem.round}: ${problem.kind}`, problem.kind === 'crashed' ? problem.error : ''),
 });
-const outcome = end.winners.includes(player) ? (end.winners.length > 1 ? 'draw' : 'won') : end.players[player].alive ? 'lost' : 'eliminated';
+const outcome = end.winners.includes(player)
+  ? end.winners.length > 1
+    ? 'draw'
+    : 'won'
+  : end.players[player].alive
+    ? 'lost'
+    : 'eliminated';
 console.log(`Match ${matchId}: ${outcome} after round ${end.round}${end.over ? ` (${end.endReason})` : ''}.`);

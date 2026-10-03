@@ -1,4 +1,6 @@
-// Tiny command-line parsing shared by the tools: arguments are written key=value.
+// Tiny command-line parsing shared by the server and the tools: arguments are written key=value.
+
+import { BotLevel, isBotLevel } from '../api';
 
 export function parseArgs(argv: string[] = process.argv.slice(2)): Map<string, string> {
   const out = new Map<string, string>();
@@ -11,9 +13,9 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): Map<string, s
 }
 
 /** "kruger:3" → { id: 'kruger', level: 3 } */
-export function botSpec(spec: string): { id: string; level: 1 | 2 | 3 } {
+export function botSpec(spec: string): { id: string; level: BotLevel } {
   const [id, level = '2'] = spec.split(':');
   const n = Number(level);
-  if (n !== 1 && n !== 2 && n !== 3) throw new Error(`Bad level in "${spec}": use 1, 2 or 3`);
+  if (!isBotLevel(n)) throw new Error(`Bad level in "${spec}": use 1, 2 or 3`);
   return { id, level: n };
 }

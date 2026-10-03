@@ -1,12 +1,16 @@
-import type { BotLevel, GameState, PlayerConfig } from '../api';
+import type { BotLevel, GameState, Mode, PlayerConfig } from '../api';
 import { Lang } from './i18n';
+
+/** Playback speed of a round: 1 normal, 2 fast, 3 very fast. */
+export type Speed = 1 | 2 | 3;
+export const SPEEDS: readonly Speed[] = [1, 2, 3];
 
 export interface Settings {
   lang: Lang;
   music: number;
   sfx: number;
   voices: boolean;
-  speed: 1 | 2 | 3;
+  speed: Speed;
   hints: boolean;
 }
 
@@ -20,7 +24,7 @@ export interface SeatConfig extends PlayerConfig {
 
 export interface Setup {
   map?: string;
-  mode: 2 | 3 | 4;
+  mode: Mode;
   players: SeatConfig[];
   orderTimer: boolean;
   gameLimit: boolean;
@@ -39,7 +43,7 @@ const SAVE_KEY = 'power.save';
 const SETUP_KEY = 'power.setup';
 
 const DEFAULTS: Settings = {
-  lang: (typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('es')) ? 'es' : 'en',
+  lang: typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('es') ? 'es' : 'en',
   music: 0.5,
   sfx: 0.8,
   voices: true,

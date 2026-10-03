@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
-  GameClient, LocalGameClient, Match, Order, OrderSheet, RESERVE, checkOrders, legalOrders, playMatch, simulate,
+  ARMY_IDS,
+  GameClient,
+  LocalGameClient,
+  MODES,
+  Match,
+  Order,
+  OrderSheet,
+  RESERVE,
+  checkOrders,
+  defaultSeating,
+  legalOrders,
+  playMatch,
+  simulate,
 } from '../src/api';
 import { bots } from '../src/bots';
 import { newMatch } from './helpers';
 
-const buy = (army: number, type: 'S' | 'T' | 'F' | 'D' = 'S'): Order => ({ k: 'buy', army, type });
+const buy = (army: number, type: 'S' | 'T' | 'F' | 'D' = 'S'): Order => ({ kind: 'buy', army, type });
 
 describe('Match', () => {
   it('collects orders, waits for everyone, then plays the round', () => {
@@ -13,7 +25,7 @@ describe('Match', () => {
     const { hq, reach } = match.board;
     expect(match.waitingFor()).toEqual([0, 1, 2, 3]);
     const to = reach.inf[hq[0]][0];
-    expect(match.submit(0, [{ k: 'move', army: 0, type: 'S', from: hq[0], to }]).accepted).toBe(true);
+    expect(match.submit(0, [{ kind: 'move', army: 0, type: 'S', from: hq[0], to }]).accepted).toBe(true);
     expect(match.waitingFor()).toEqual([1, 2, 3]);
     expect(match.ready).toBe(false);
     for (const p of [1, 2, 3]) match.submit(p, []);
@@ -28,13 +40,27 @@ describe('Match', () => {
   it('refuses a submission with any illegal order, and stores nothing', () => {
     const match = newMatch(4);
     const result = match.submit(0, [buy(0), buy(1)]);
-    expect(result).toMatchObject({ accepted: false, reason: 'illegal', problems: [{ index: 0, error: 'noPower' }, { index: 1, error: 'notYours' }] });
+    expect(result).toMatchObject({
+      accepted: false,
+      reason: 'illegal',
+      problems: [
+        { index: 0, error: 'noPower' },
+        { index: 1, error: 'notYours' },
+      ],
+    });
     expect(match.hasSubmitted(0)).toBe(false);
   });
 
   it('refuses malformed input without throwing', () => {
     const match = newMatch(4);
-    for (const junk of [null, 42, {}, { k: 'move' }, { k: 'buy', army: 0, type: 'Z' }, { k: 'mk', army: 0, at: -1, power: 0, spend: { S: 'x' } }])
+    for (const junk of [
+      null,
+      42,
+      {},
+      { kind: 'move' },
+      { kind: 'buy', army: 0, type: 'Z' },
+      { kind: 'makeMissile', army: 0, at: -1, power: 0, spend: { S: 'x' } },
+    ])
       expect(match.submit(0, [junk as unknown as Order]).problems[0].error).toBe('malformed');
     expect(match.submit(0, 'orders' as unknown as Order[]).accepted).toBe(false);
     expect(match.submit(9, []).reason).toBe('unknownPlayer');
@@ -43,7 +69,7 @@ describe('Match', () => {
   it('a later submission replaces the earlier one', () => {
     const match = newMatch(4);
     const { hq, reach } = match.board;
-    match.submit(0, [{ k: 'move', army: 0, type: 'T', from: hq[0], to: reach.tank[hq[0]][0] }]);
+    match.submit(0, [{ kind: 'move', army: 0, type: 'T', from: hq[0], to: reach.tank[hq[0]][0] }]);
     match.submit(0, []);
     expect(match.resolveRound().orders[0]).toEqual([]);
   });
@@ -81,7 +107,7 @@ describe('OrderSheet', () => {
     const state = match.exportState();
     state.armies[0].power = 4;
     const sheet = new OrderSheet(state, 0);
-    const deploy: Order = { k: 'move', army: 0, type: 'S', from: RESERVE, to: match.board.hq[0] };
+    const deploy: Order = { kind: 'move', army: 0, type: 'S', from: RESERVE, to: match.board.hq[0] };
     expect(sheet.check(deploy)).toBe('noPiece');
     expect(sheet.add(buy(0))).toBe(true);
     expect(sheet.add(deploy)).toBe(true);
@@ -112,8 +138,9 @@ describe('legalOrders', () => {
     expect(legal.length).toBeGreaterThan(10);
     for (const o of legal) expect(sheet.check(o)).toBeNull();
     const { hq, reach } = match.board;
-    for (const to of reach.air[hq[0]]) expect(legal).toContainEqual({ k: 'move', army: 0, type: 'F', from: hq[0], to });
-    expect(legal.some((o) => o.k === 'buy')).toBe(false); // no Power yet
+    for (const to of reach.air[hq[0]])
+      expect(legal).toContainEqual({ kind: 'move', army: 0, type: 'F', from: hq[0], to });
+    expect(legal.some((o) => o.kind === 'buy')).toBe(false); // no Power yet
     expect(legal.every((o) => o.army === 0)).toBe(true);
   });
 
@@ -126,10 +153,10 @@ describe('legalOrders', () => {
     const state = newMatch(4).exportState();
     state.armies[0].power = 100;
     const sheet = new OrderSheet(state, 0);
-    const mk = legalOrders(sheet).find((o) => o.k === 'mk');
+    const mk = legalOrders(sheet).find((o) => o.kind === 'makeMissile');
     expect(mk).toBeDefined();
     sheet.add(mk!);
-    expect(legalOrders(sheet).some((o) => o.k === 'launch')).toBe(true);
+    expect(legalOrders(sheet).some((o) => o.kind === 'launch')).toBe(true);
   });
 });
 
@@ -139,15 +166,18 @@ describe('simulate and checkOrders', () => {
     const state = match.exportState();
     const { hq, reach } = match.board;
     const to = reach.inf[hq[0]][0];
-    const result = simulate(state, [[{ k: 'move', army: 0, type: 'S', from: hq[0], to }]], { events: true });
+    const result = simulate(state, [[{ kind: 'move', army: 0, type: 'S', from: hq[0], to }]], { events: true });
     expect(result.state.round).toBe(2);
     expect(state.round).toBe(1);
-    expect(result.events.some((e) => e.t === 'penalty')).toBe(true); // the others gave no orders
+    expect(result.events.some((e) => e.kind === 'penalty')).toBe(true); // the others gave no orders
   });
 
   it('reports each wrong order with its position', () => {
     const state = newMatch(4).exportState();
-    expect(checkOrders(state, 0, [buy(0), { k: 'nope' }])).toEqual([{ index: 0, error: 'noPower' }, { index: 1, error: 'malformed' }]);
+    expect(checkOrders(state, 0, [buy(0), { kind: 'nope' }])).toEqual([
+      { index: 0, error: 'noPower' },
+      { index: 1, error: 'malformed' },
+    ]);
   });
 });
 
@@ -177,4 +207,20 @@ describe('clients', () => {
     await waiting;
     expect(seen).toBe(2);
   });
+});
+
+describe('defaultSeating', () => {
+  it.each(MODES.flatMap((mode) => ARMY_IDS.map((first) => [mode, first] as const)))(
+    '%s players starting at army %s: one seat each, no army twice, the first seat gets the first army',
+    (mode, first) => {
+      const seating = defaultSeating(mode, first);
+      expect(seating).toHaveLength(mode);
+      expect(seating[0][0]).toBe(first);
+      const used = seating.flat();
+      expect(new Set(used).size).toBe(used.length);
+      // Two players command two neighbouring armies each; otherwise the spare army is mercenary.
+      expect(used.length).toBe(mode === 2 ? 4 : mode);
+      if (mode === 2) for (const [a, b] of seating) expect((b - a + 4) % 4).toBe(1);
+    },
+  );
 });

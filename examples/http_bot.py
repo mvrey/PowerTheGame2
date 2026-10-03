@@ -34,7 +34,7 @@ def choose_orders(server, view):
     orders = []
     while len(orders) < view["maxOrders"]:
         legal = call(server, "/api/legal", {"state": view["state"], "player": view["me"], "orders": orders})["orders"]
-        legal = [o for o in legal if o["k"] != "launch"]
+        legal = [o for o in legal if o["kind"] != "launch"]
         if not legal:
             break
         orders.append(random.choice(legal))

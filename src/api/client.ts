@@ -25,7 +25,10 @@ export const movedPast = (status: MatchStatus, round: number) => status.over || 
 
 /** A seat at a Match in this process. */
 export class LocalGameClient implements GameClient {
-  constructor(private readonly match: Match, readonly player: number) {}
+  constructor(
+    private readonly match: Match,
+    readonly player: number,
+  ) {}
 
   status(afterRound?: number): Promise<MatchStatus> {
     const now = this.match.status();

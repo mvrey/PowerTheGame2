@@ -8,10 +8,12 @@ describe.each(MAPS.map((m) => [m.id] as const))('map %s', (id) => {
   const { adj, hq, nodes, reach, rounds, territory } = board;
 
   it('is a sound board', () => {
-    adj.forEach((list, a) => list.forEach((b) => {
-      expect(adj[b]).toContain(a);
-      expect(nodes[a].kind === 'sea' && nodes[b].kind === 'sea').toBe(false);
-    }));
+    adj.forEach((list, a) =>
+      list.forEach((b) => {
+        expect(adj[b]).toContain(a);
+        expect(nodes[a].kind === 'sea' && nodes[b].kind === 'sea').toBe(false);
+      }),
+    );
     for (let a = 0; a < 4; a++) {
       expect(territory[a].length).toBeGreaterThan(0);
       // The HQ opens onto its own territory, and infantry can walk out of it.
@@ -21,8 +23,7 @@ describe.each(MAPS.map((m) => [m.id] as const))('map %s', (id) => {
 
   it('lets every kind of unit travel between any two HQs', () => {
     for (const cls of ['inf', 'tank', 'air', 'naval'] as const)
-      for (let a = 0; a < 4; a++)
-        for (let b = 0; b < 4; b++) expect(rounds[cls][hq[a]][hq[b]]).toBeLessThan(Infinity);
+      for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) expect(rounds[cls][hq[a]][hq[b]]).toBeLessThan(Infinity);
   });
 
   it('is fair: every army sees the same distances to its neighbours', () => {
@@ -36,7 +37,8 @@ describe.each(MAPS.map((m) => [m.id] as const))('map %s', (id) => {
 
   it('never lets ground or air units into the sea, nor ships inland', () => {
     nodes.forEach((_, from) => {
-      for (const cls of ['inf', 'tank', 'air'] as const) for (const to of reach[cls][from]) expect(nodes[to].kind).not.toBe('sea');
+      for (const cls of ['inf', 'tank', 'air'] as const)
+        for (const to of reach[cls][from]) expect(nodes[to].kind).not.toBe('sea');
       for (const to of reach.naval[from]) expect(nodes[to].kind === 'sector' && !nodes[to].coastal).toBe(false);
     });
   });
@@ -80,11 +82,13 @@ describe('map specifics', () => {
     expect(adj[N.IA].map((n) => nodes[n].id)).toContain('G0');
   });
   it('boards of different maps coexist', () => {
-    const classic = getBoard('classic'), ring = getBoard('ring');
+    const classic = getBoard('classic'),
+      ring = getBoard('ring');
     expect(classic.numNodes).toBe(57);
     expect(ring.numNodes).toBe(56);
     expect(getBoard('classic')).toBe(classic);
-    const a = newMatch(4, 'ring'), c = newMatch(4, 'classic');
+    const a = newMatch(4, 'ring'),
+      c = newMatch(4, 'classic');
     expect(a.board).toBe(ring);
     expect(c.board).toBe(classic);
   });

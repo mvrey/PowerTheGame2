@@ -1,32 +1,33 @@
-import { GameState, ORDERS_PER_ARMY, PIECES, PieceType, RESERVE, boardOf } from '../../api';
+import { ORDERS_PER_ARMY, PIECES, PieceType, RESERVE, ReadonlyGameState, boardOf, orderAllowance } from '../../api';
 
 /** What a piece is worth to the AI. A megamissile has no combat power but is far from worthless. */
 export const VALUE: Record<PieceType, number> = { S: 2, T: 3, F: 5, D: 10, R: 20, H: 30, B: 25, C: 50, M: 75 };
 
-/** Teams are indexed controller + 1, so mercenaries are side 0. */
-export const sideOf = (state: GameState, army: number) => state.armies[army].controller + 1;
+/** Sides are indexed controller + 1, so mercenaries are side 0. */
+export const sideOf = (state: ReadonlyGameState, army: number) => state.armies[army].controller + 1;
 
+/** Who stands where, and who could get where next round. Tables are indexed [node][side]. */
 export interface Analysis {
   sides: number;
-  /** power[node][side]: combat power standing on the node. */
+  /** Combat power standing on the node. */
   power: number[][];
-  /** value[node][side]: worth of the pieces standing on the node. */
+  /** Worth (VALUE) of the pieces standing on the node. */
   value: number[][];
-  /** pot[node][side]: the most power the side could have on the node after one round. */
-  pot: number[][];
-  /** inf[node][side]: the side could have infantry on the node after one round. */
-  inf: boolean[][];
+  /** The most power the side could have on the node after one round. */
+  potential: number[][];
+  /** Whether the side could have infantry on the node after one round. */
+  canBringInfantry: boolean[][];
 }
 
-export function analyse(state: GameState): Analysis {
+export function analyse(state: ReadonlyGameState): Analysis {
   const { hq, numNodes, reach } = boardOf(state);
   const sides = state.players.length + 1;
-  const grid = <T>(make: () => T): T[][] =>
+  const table = <T>(make: () => T): T[][] =>
     Array.from({ length: numNodes }, () => Array.from({ length: sides }, make));
-  const power = grid(() => 0);
-  const value = grid(() => 0);
-  const inf = grid(() => false);
-  const arrivals = grid<number[]>(() => []);
+  const power = table(() => 0);
+  const value = table(() => 0);
+  const canBringInfantry = table(() => false);
+  const arrivals = table<number[]>(() => []);
 
   for (const p of state.pieces) {
     const def = PIECES[p.type];
@@ -35,42 +36,44 @@ export function analyse(state: GameState): Analysis {
     if (p.loc === RESERVE) {
       if (def.cls) {
         arrivals[hq[p.army]][side].push(def.power);
-        if (infantry) inf[hq[p.army]][side] = true;
+        if (infantry) canBringInfantry[hq[p.army]][side] = true;
       }
       continue;
     }
     power[p.loc][side] += def.power;
     value[p.loc][side] += VALUE[p.type];
-    if (infantry) inf[p.loc][side] = true;
+    if (infantry) canBringInfantry[p.loc][side] = true;
     if (!def.cls) continue;
     for (const to of reach[def.cls][p.loc]) {
       arrivals[to][side].push(def.power);
-      if (infantry) inf[to][side] = true;
+      if (infantry) canBringInfantry[to][side] = true;
     }
   }
 
+  // A side can only move as many pieces as it has orders: the strongest arrivals count.
   const orders = new Array<number>(sides).fill(ORDERS_PER_ARMY);
-  for (const pl of state.players)
-    orders[pl.id + 1] = ORDERS_PER_ARMY * pl.armies.filter((a) => state.armies[a].alive).length;
-  const pot = power.map((row, node) =>
+  for (const player of state.players) orders[player.id + 1] = orderAllowance(state, player.id);
+  const potential = power.map((row, node) =>
     row.map((standing, side) => {
-      const list = arrivals[node][side];
-      if (!list.length) return standing;
-      list.sort((a, b) => b - a);
-      let total = standing;
-      for (let i = 0; i < list.length && i < orders[side]; i++) total += list[i];
-      return total;
+      const strongestFirst = [...arrivals[node][side]].sort((a, b) => b - a);
+      return standing + strongestFirst.slice(0, orders[side]).reduce((sum, p) => sum + p, 0);
     }),
   );
-  return { sides, power, value, pot, inf };
+  return { sides, power, value, potential, canBringInfantry };
 }
 
 /** Strongest hostile presence on a node, optionally only counting sides able to bring infantry. */
-export function hostile(an: Analysis, table: number[][], node: number, mySide: number, needInf = false): number {
+export function hostile(
+  analysis: Analysis,
+  table: number[][],
+  node: number,
+  mySide: number,
+  needInfantry = false,
+): number {
   let best = 0;
-  for (let s = 0; s < an.sides; s++) {
-    if (s === mySide || (needInf && !an.inf[node][s])) continue;
-    if (table[node][s] > best) best = table[node][s];
+  for (let side = 0; side < analysis.sides; side++) {
+    if (side === mySide || (needInfantry && !analysis.canBringInfantry[node][side])) continue;
+    best = Math.max(best, table[node][side]);
   }
   return best;
 }

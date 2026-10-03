@@ -1,17 +1,17 @@
 import { RESERVE } from '../engine/board';
 import { teamOf } from '../engine/game';
-import { GameState, Piece, PIECES } from '../engine/types';
+import { PIECES, ReadonlyGameState, ReadonlyPiece } from '../engine/types';
 
 // Small read-only helpers that most bots end up writing. See also the engine queries re-exported
 // from index.ts (armyStrength, livingArmies, teamOf...).
 
 /** Pieces standing on a node (or in an army's Reserve, with node = RESERVE and `army`). */
-export function piecesAt(state: GameState, node: number, army?: number): Piece[] {
+export function piecesAt(state: ReadonlyGameState, node: number, army?: number): ReadonlyPiece[] {
   return state.pieces.filter((p) => p.loc === node && (node !== RESERVE || p.army === army));
 }
 
 /** Combat power on a node by team (controlling player, or MERC for mercenaries). */
-export function powerByTeam(state: GameState, node: number): Map<number, number> {
+export function powerByTeam(state: ReadonlyGameState, node: number): Map<number, number> {
   const out = new Map<number, number>();
   for (const p of state.pieces) {
     if (p.loc !== node || node === RESERVE) continue;
@@ -22,12 +22,12 @@ export function powerByTeam(state: GameState, node: number): Map<number, number>
 }
 
 /** Combat power of one player's pieces on a node. */
-export function powerOf(state: GameState, node: number, player: number): number {
+export function powerOf(state: ReadonlyGameState, node: number, player: number): number {
   return powerByTeam(state, node).get(player) ?? 0;
 }
 
 /** The strongest power any other team has on a node. */
-export function enemyPowerAt(state: GameState, node: number, player: number): number {
+export function enemyPowerAt(state: ReadonlyGameState, node: number, player: number): number {
   let best = 0;
   for (const [team, power] of powerByTeam(state, node)) if (team !== player && power > best) best = power;
   return best;

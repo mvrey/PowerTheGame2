@@ -1,5 +1,5 @@
-import { cloneState, livingArmies } from '../engine/game';
-import { GameState, MERC, ORDERS_PER_ARMY } from '../engine/types';
+import { cloneState, livingArmies, orderAllowance } from '../engine/game';
+import { GameState, MERC, ORDERS_PER_ARMY, ReadonlyGameState } from '../engine/types';
 
 /**
  * Everything a player needs to decide a round. Plain JSON data, so the same view reaches a bot
@@ -26,7 +26,7 @@ export interface PlayerView {
   submitted: boolean;
 }
 
-export function createView(state: GameState, player: number, submitted = false): PlayerView {
+export function createView(state: ReadonlyGameState, player: number, submitted = false): PlayerView {
   const armies = state.players[player] ? livingArmies(state, player) : [];
   const mercs = state.armies.filter((a) => a.alive && a.controller === MERC).map((a) => a.id);
   return {
@@ -35,7 +35,7 @@ export function createView(state: GameState, player: number, submitted = false):
     state: cloneState(state),
     armies,
     commandable: [...armies, ...mercs].sort((a, b) => a - b),
-    maxOrders: armies.length * ORDERS_PER_ARMY,
+    maxOrders: state.players[player] ? orderAllowance(state, player) : 0,
     ordersPerArmy: ORDERS_PER_ARMY,
     submitted,
   };

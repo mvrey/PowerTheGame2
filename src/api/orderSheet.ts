@@ -1,6 +1,12 @@
-import { cloneState, livingArmies, ordersLeft, withinBudget } from '../engine/game';
+import { cloneState, livingArmies, orderAllowance, ordersLeft, withinBudget } from '../engine/game';
 import { applyOrder, checkOrder, isWellFormed } from '../engine/rules';
-import { GameState, ORDERS_PER_ARMY, Order, OrderError } from '../engine/types';
+import { GameState, Order, OrderError, ReadonlyGameState } from '../engine/types';
+
+export interface OrderProblem {
+  /** Position of the order in the list. */
+  index: number;
+  error: OrderError;
+}
 
 /**
  * A player's order list for one round, built one order at a time.
@@ -17,13 +23,17 @@ export class OrderSheet {
   private projected: GameState;
 
   /**
-   * @param state The state at the start of the round (not modified).
+   * @param base The state at the start of the round (not modified).
    * @param player Who writes the orders.
    * @param orders Initial orders; any that are not legal in sequence are left out.
    */
-  constructor(private readonly base: GameState, readonly player: number, orders: readonly Order[] = []) {
+  constructor(
+    private readonly base: ReadonlyGameState,
+    readonly player: number,
+    orders: readonly Order[] = [],
+  ) {
     this.projected = cloneState(base);
-    for (const o of orders) this.add(o);
+    this.addAll(orders);
   }
 
   /** The orders so far, in execution order. */
@@ -31,13 +41,13 @@ export class OrderSheet {
     return this.list;
   }
 
-  /** The board once the orders so far are carried out (ignoring everyone else). Do not modify. */
-  get preview(): GameState {
+  /** The board once the orders so far are carried out (ignoring everyone else). */
+  get preview(): ReadonlyGameState {
     return this.projected;
   }
 
-  /** The state the sheet was started from. Do not modify. */
-  get start(): GameState {
+  /** The state the sheet was started from. */
+  get start(): ReadonlyGameState {
     return this.base;
   }
 
@@ -54,6 +64,20 @@ export class OrderSheet {
     applyOrder(this.projected, order);
     this.list.push(order);
     return true;
+  }
+
+  /**
+   * Adds, in sequence, every order that is legal at its turn. Orders may come from untrusted
+   * sources, so anything at all is accepted; returns why each of the others was left out.
+   */
+  addAll(orders: readonly unknown[]): OrderProblem[] {
+    const problems: OrderProblem[] = [];
+    orders.forEach((order, index) => {
+      const error = this.check(order as Order);
+      if (error) problems.push({ index, error });
+      else this.add(order as Order);
+    });
+    return problems;
   }
 
   /**
@@ -79,7 +103,7 @@ export class OrderSheet {
 
   /** Total orders allowed this round. */
   get max(): number {
-    return livingArmies(this.base, this.player).length * ORDERS_PER_ARMY;
+    return orderAllowance(this.base, this.player);
   }
 
   /** No order can be added any more. */
@@ -91,4 +115,9 @@ export class OrderSheet {
     this.list = [];
     this.projected = cloneState(this.base);
   }
+}
+
+/** Checks a whole order list as the player would submit it. Empty when every order is legal. */
+export function checkOrders(state: ReadonlyGameState, player: number, orders: readonly unknown[]): OrderProblem[] {
+  return new OrderSheet(state, player).addAll(orders);
 }

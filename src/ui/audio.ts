@@ -2,8 +2,24 @@ import { settings } from './settings';
 
 export type Sfx = 'battle' | 'clctblts' | 'dope' | 'flg_cap' | 'megaexpl' | 'megafly' | 'new_rnd' | 'strtgame';
 export type Voice =
-  | 'aaaaaaah' | 'asta' | 'cattle' | 'crush' | 'crushyou' | 'finished' | 'lovegame' | 'luchy' | 'my_day'
-  | 'nanner' | 'no' | 'nothing' | 'prisoner' | 'pwr_crpt' | 'runhide' | 'scum' | 'tomega' | 'yeehaw';
+  | 'aaaaaaah'
+  | 'asta'
+  | 'cattle'
+  | 'crush'
+  | 'crushyou'
+  | 'finished'
+  | 'lovegame'
+  | 'luchy'
+  | 'my_day'
+  | 'nanner'
+  | 'no'
+  | 'nothing'
+  | 'prisoner'
+  | 'pwr_crpt'
+  | 'runhide'
+  | 'scum'
+  | 'tomega'
+  | 'yeehaw';
 export type Mood = 'menu' | 'game' | 'win' | 'lose';
 
 const TRACKS: Record<Mood, string[]> = {
@@ -15,7 +31,18 @@ const TRACKS: Record<Mood, string[]> = {
 
 /** Voice lines by occasion. */
 export const TAUNTS = {
-  win: ['crush', 'crushyou', 'scum', 'cattle', 'prisoner', 'nothing', 'my_day', 'nanner', 'luchy', 'runhide'] as Voice[],
+  win: [
+    'crush',
+    'crushyou',
+    'scum',
+    'cattle',
+    'prisoner',
+    'nothing',
+    'my_day',
+    'nanner',
+    'luchy',
+    'runhide',
+  ] as Voice[],
   lose: ['aaaaaaah', 'no'] as Voice[],
   kill: ['finished', 'asta'] as Voice[],
   missile: ['tomega', 'yeehaw'] as Voice[],
@@ -73,7 +100,9 @@ class AudioManager {
       }
     });
     this.music = audio;
-    audio.play().catch(() => { this.music = null; });
+    audio.play().catch(() => {
+      this.music = null;
+    });
   }
 
   applyVolume(): void {

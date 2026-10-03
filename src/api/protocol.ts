@@ -1,8 +1,20 @@
 // JSON shapes exchanged with the HTTP server (src/server). See BOTS.md for the endpoint list.
 
 import { Board } from '../engine/board';
+import { Mode } from '../engine/types';
 import { BotLevel } from './bot';
 import { MatchStatus } from './match';
+
+/**
+ * Version of the JSON shapes below, of Order and of RoundEvent. Bumped on every breaking change;
+ * BOTS.md lists what changed.
+ */
+export const PROTOCOL_VERSION = 2;
+
+export interface ApiIndex {
+  protocol: number;
+  endpoints: string[];
+}
 
 export interface SeatRequest {
   /** Shown to other players. Defaults to the bot's name or "Player N". */
@@ -17,7 +29,7 @@ export interface SeatRequest {
 export interface CreateMatchRequest {
   map?: string;
   /** Players: 2, 3 or 4 (default: the number of seats). */
-  mode?: 2 | 3 | 4;
+  mode?: Mode;
   seats: SeatRequest[];
   /** The round is played without the orders that have not arrived after this long. */
   orderTimeoutMs?: number;
@@ -77,7 +89,9 @@ export function boardInfo(board: Board): BoardInfo {
     territory: board.territory,
     adj: board.adj,
     reach: Object.fromEntries(classes.map((c) => [c, board.reach[c]])),
-    rounds: Object.fromEntries(classes.map((c) => [c, board.rounds[c].map((row) => row.map((d) => (Number.isFinite(d) ? d : null)))])),
+    rounds: Object.fromEntries(
+      classes.map((c) => [c, board.rounds[c].map((row) => row.map((d) => (Number.isFinite(d) ? d : null)))]),
+    ),
   };
 }
 

@@ -26,7 +26,7 @@ export default defineBot({
       const sheet = new OrderSheet(view.state, view.me);
       // Buy whatever Power allows and bring it home.
       for (const order of legalOrders(sheet)) {
-        if (order.k === 'buy' || (order.k === 'move' && order.from === -1)) sheet.add(order);
+        if (order.kind === 'buy' || (order.kind === 'move' && order.from === -1)) sheet.add(order);
       }
       return [...sheet.orders];
     },
@@ -82,12 +82,14 @@ seat for one game, so it may keep memory between rounds in its own fields.
 
 ### Orders
 
-| Order | Fields | Meaning |
+Every order is an object whose `kind` says what it is, e.g. `{ kind: 'buy', army: 0, type: 'S' }`.
+
+| `kind` | Fields | Meaning |
 |---|---|---|
 | `move` | `army, type, from, to` | Move one piece. `from: -1` (the Reserve) deploys it to its HQ (`to` = that HQ). |
 | `buy` | `army, type` | Buy a Soldier, Tank, Fighter or Destroyer (`S T F D`) with Power. It goes to the Reserve. |
-| `up` | `army, type, at` | Trade three identical small pieces at `at` (a node or -1) for the big one. |
-| `mk` | `army, at, spend, power` | Build a Megamissile from pieces at `at` (`spend: { S: 2, R: 1, ... }`) plus Power (Reserve only), worth 100 or more. |
+| `tradeUp` | `army, type, at` | Trade three identical small pieces at `at` (a node or -1) for the big one. |
+| `makeMissile` | `army, at, spend, power` | Build a Megamissile from pieces at `at` (`spend: { S: 2, R: 1, ... }`) plus Power (Reserve only), worth 100 or more. |
 | `launch` | `army, from, target, targetArmy` | Launch a Megamissile at a node (`targetArmy: -1`), or at an army's Reserve (`target: -1`). |
 
 Piece types: `S` Soldier, `T` Tank, `F` Fighter, `D` Destroyer, `R` Regiment, `H` Heavy tank,
@@ -105,14 +107,15 @@ Import everything from `src/api` (bots may not import the engine directly; a tes
 | Tool | What it does |
 |---|---|
 | `boardOf(state)` / `getBoard(mapId)` | The board: `nodes` (`kind`, `army`, `num`, `coastal`), `hq[army]`, `territory[army]`, `adj`, `reach[cls][from]` (one move), `rounds[cls][from][to]` (moves needed), `canReach(cls, from, to)` |
-| `new OrderSheet(state, me)` | Builds an order list: `check(order)` says why an order would fail, `add(order)` adds it if legal, `preview` is the board as your orders so far leave it, `left(army)`, `full`, `removeAt(i)` |
+| `new OrderSheet(state, me)` | Builds an order list: `check(order)` says why an order would fail, `add(order)` adds it if legal, `addAll(orders)` adds those legal in sequence and reports the rest, `preview` is the board as your orders so far leave it (read-only), `left(army)`, `full`, `removeAt(i)` |
 | `legalOrders(sheet)` | Every order that could be added to the sheet now |
 | `simulate(state, ordersByPlayer)` | Plays a round on a copy with the real rules: `{ state, events }` |
 | `checkOrders(state, me, orders)` | Problems in a whole order list |
 | `cheapestMissileSpend(state, army, at)` | The cheapest way to build a Megamissile there |
 | `piecesAt`, `powerOf`, `enemyPowerAt`, `powerByTeam` | What stands on a node |
-| `armyStrength`, `playerStrength`, `livingArmies`, `teamOf`, `executionOrder` | Who is strong, who is alive, who acts first |
-| `PIECES`, `GROUP1`, `RESERVE`, `MERC`, `MISSILE_COST`, `ORDERS_PER_ARMY` | Rules constants |
+| `armyStrength`, `playerStrength`, `livingArmies`, `teamOf`, `executionOrder`, `orderAllowance` | Who is strong, who is alive, who acts first, how many orders a player may give |
+| `defaultSeating(mode)`, `seatRng(seed, player)` | The usual armies of each seat; a seat's random numbers for a seeded game |
+| `PIECES`, `GROUP1`, `RESERVE`, `MERC`, `MISSILE_COST`, `ORDERS_PER_ARMY`, `MOVE_RANGE`, `ARMY_IDS`, `ORDER_ERRORS` | Rules constants |
 
 Classes of movement are `inf` (Soldier, Regiment), `tank`, `air` and `naval`; `PIECES[type].cls`
 gives a piece's class (`null` for the Megamissile).
@@ -122,10 +125,10 @@ gives a piece's class (`null` for the Megamissile).
 Play whole games without any interface:
 
 ```ts
-import { Match, runHeadless } from '../src/api';
+import { Match, defaultSeating, runHeadless } from '../src/api';
 import { bots } from '../src/bots';
 
-const match = Match.create({ map: 'classic', mode: 4, players: [0, 1, 2, 3].map((a) => ({ name: 'P' + a, armies: [a] })) });
+const match = Match.create({ map: 'classic', mode: 4, players: defaultSeating(4).map((armies, seat) => ({ name: 'P' + seat, armies })) });
 const players = ['turtle', 'okoye', 'kruger', 'vega'].map((id) => bots.create(id, { level: 2 }));
 const end = await runHeadless(match, players, { seed: 1, maxRounds: 80, onProblem: (player, p) => console.log(player, p) });
 console.log(end.winners);
@@ -149,7 +152,7 @@ optional order timeout expires).
 
 ### Endpoints
 
-All bodies are JSON. `GET /api` lists them too.
+All bodies are JSON. `GET /api` lists them too, together with the protocol version (see below).
 
 | Endpoint | |
 |---|---|
@@ -199,3 +202,13 @@ const end = await playMatch(myBot, client);
 
 `npm run bot -- server=http://localhost:8787 bot=greedy vs=kruger:2,vega,rookie` does exactly
 that with any registered bot, and `match=… player=… token=…` joins an existing match instead.
+
+### Protocol versions
+
+`GET /api` answers `{ protocol, endpoints }`; `PROTOCOL_VERSION` holds the same number in
+TypeScript. It goes up whenever a change would break an existing bot.
+
+| Version | Changes |
+|---|---|
+| 2 | Orders and round events say what they are in `kind` (was `k` for orders, `t` for events). Order kinds `up` and `mk` became `tradeUp` and `makeMissile`. Orders in the old form are refused as `malformed`. |
+| 1 | First version. |

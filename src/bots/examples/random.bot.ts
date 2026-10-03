@@ -14,7 +14,7 @@ export default defineBot({
     decide(view, ctx) {
       const sheet = new OrderSheet(view.state, view.me);
       for (let i = 0; i < 5 && !sheet.full; i++) {
-        const options = legalOrders(sheet).filter((o) => o.k !== 'launch');
+        const options = legalOrders(sheet).filter((o) => o.kind !== 'launch');
         if (!options.length) break;
         sheet.add(options[Math.floor(ctx.rng() * options.length)]);
       }

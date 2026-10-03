@@ -6,4 +6,7 @@ const modules = import.meta.glob<Record<string, unknown>>('./**/*.bot.ts', { eag
 
 export const bots = new BotRegistry(Object.values(modules).flatMap(definitionsIn));
 
+/** The balanced general: the default opponent, and the stand-in for a bot that is no longer installed. */
+export const DEFAULT_BOT_ID = 'okoye';
+
 export { BotRegistry, definitionsIn } from './registry';

@@ -1,14 +1,14 @@
 import { Board, boardOf } from '../engine/board';
 import { GameConfig, cloneState, newGame, snapshot } from '../engine/game';
 import { resolveRound } from '../engine/resolve';
-import { GameState, Order, RoundEvent, Snapshot } from '../engine/types';
-import { OrderProblem, checkOrders } from './simulate';
+import { GameState, Mode, Order, ReadonlyGameState, RoundEvent, Snapshot } from '../engine/types';
+import { OrderProblem, checkOrders } from './orderSheet';
 import { PlayerView, createView } from './view';
 
 /** Where a match stands. Plain JSON. */
 export interface MatchStatus {
   map: string;
-  mode: 2 | 3 | 4;
+  mode: Mode;
   /** The round being planned (or the last one played, once the game is over). */
   round: number;
   /** Player who acts first this round. */
@@ -68,12 +68,12 @@ export class Match {
   }
 
   /** Continues a game from a saved state. */
-  static restore(state: GameState): Match {
+  static restore(state: ReadonlyGameState): Match {
     return new Match(cloneState(state));
   }
 
-  /** The live state, for the host to read. Never modify it. */
-  get state(): Readonly<GameState> {
+  /** The live state, for the host to read. */
+  get state(): ReadonlyGameState {
     return this.game;
   }
 
@@ -114,10 +114,11 @@ export class Match {
     const who = this.game.players[player];
     if (!who) return { accepted: false, reason: 'unknownPlayer', problems: [] };
     if (!who.alive) return { accepted: false, reason: 'eliminated', problems: [] };
-    if (!Array.isArray(orders)) return { accepted: false, reason: 'illegal', problems: [{ index: -1, error: 'malformed' }] };
+    if (!Array.isArray(orders))
+      return { accepted: false, reason: 'illegal', problems: [{ index: -1, error: 'malformed' }] };
     const problems = checkOrders(this.game, player, orders);
     if (problems.length) return { accepted: false, reason: 'illegal', problems };
-    this.orders.set(player, orders.map((o) => structuredCopy(o)));
+    this.orders.set(player, structuredClone([...orders]));
     return { accepted: true, problems: [] };
   }
 
@@ -142,7 +143,11 @@ export class Match {
     const round = this.game.round;
     const orders = this.game.players.map((p) => this.orders.get(p.id) ?? []);
     const before = snapshot(this.game);
-    const events = resolveRound(this.game, orders, { record: true, snapshots: opts.snapshots, lastRound: opts.lastRound });
+    const events = resolveRound(this.game, orders, {
+      record: true,
+      snapshots: opts.snapshots,
+      lastRound: opts.lastRound,
+    });
     this.orders.clear();
     const report: RoundReport = { round, orders, events, before, status: this.status() };
     for (const listener of [...this.listeners]) listener(report);
@@ -154,8 +159,4 @@ export class Match {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
-}
-
-function structuredCopy<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
 }

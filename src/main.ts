@@ -3,7 +3,7 @@ import { getBoard } from './api';
 import { audio } from './ui/audio';
 import { BoardView } from './ui/boardView';
 import { clear, h } from './ui/dom';
-import { GameScreen } from './ui/gameScreen';
+import { GameScreen } from './ui/game/gameScreen';
 import { nodeLabel, setLang } from './ui/i18n';
 import { installIcons } from './ui/icons';
 import { mainMenu, optionsModal, rulesModal, setupScreen } from './ui/menus';

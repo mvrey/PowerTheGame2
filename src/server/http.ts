@@ -1,6 +1,19 @@
 import { IncomingMessage, Server, ServerResponse, createServer } from 'node:http';
 import {
-  BotInfo, GameState, MAPS, Order, OrderSheet, boardInfo, checkOrders, getBoard, legalOrders, localize, simulate,
+  ApiErrorBody,
+  ApiIndex,
+  BotInfo,
+  GameState,
+  MAPS,
+  Order,
+  OrderSheet,
+  boardInfo,
+  checkOrders,
+  getBoard,
+  legalOrders,
+  localize,
+  simulate,
+  PROTOCOL_VERSION,
 } from '../api';
 import { BotRegistry } from '../bots';
 import { MatchService, ServiceError } from './matchService';
@@ -9,8 +22,19 @@ import { MatchService, ServiceError } from './matchService';
 // by GET /api and documented in BOTS.md.
 
 type Params = Record<string, string>;
-type Handler = (ctx: { params: Params; query: URLSearchParams; body: unknown; req: IncomingMessage }) => unknown | Promise<unknown>;
-interface Route { method: string; pattern: RegExp; keys: string[]; handler: Handler; doc: string }
+type Handler = (ctx: {
+  params: Params;
+  query: URLSearchParams;
+  body: unknown;
+  req: IncomingMessage;
+}) => unknown | Promise<unknown>;
+interface Route {
+  method: string;
+  pattern: RegExp;
+  keys: string[];
+  handler: Handler;
+  doc: string;
+}
 
 const MAX_BODY = 1 << 20;
 
@@ -27,52 +51,88 @@ export function createApiServer({ service, registry }: ApiServerOptions): Server
     routes.push({ method, pattern, keys, handler, doc: `${method} ${path} — ${doc}` });
   };
 
-  route('GET', '/api', 'this list', () => ({ endpoints: routes.map((r) => r.doc) }));
+  route('GET', '/api', 'protocol version and this list', (): ApiIndex => ({
+    protocol: PROTOCOL_VERSION,
+    endpoints: routes.map((r) => r.doc),
+  }));
   route('GET', '/api/bots', 'bots that can play server-side seats', (): BotInfo[] =>
-    registry.list().map((d) => ({ id: d.id, name: d.name, description: localize(d.description, 'en'), levels: d.levels !== false })));
+    registry
+      .list()
+      .map((d) => ({ id: d.id, name: d.name, description: localize(d.description, 'en'), levels: d.levels !== false })),
+  );
   route('GET', '/api/maps', 'map ids', () => MAPS.map((m) => m.id));
   route('GET', '/api/maps/:id', 'a board: spaces, adjacency, one-move reach and distances', ({ params }) => {
     if (!MAPS.some((m) => m.id === params.id)) throw new ServiceError(404, `no map "${params.id}"`);
     return boardInfo(getBoard(params.id));
   });
 
-  route('POST', '/api/matches', 'create a match (body: CreateMatchRequest); answers with the remote seats\' tokens',
-    ({ body }) => service.create(body as never));
+  route(
+    'POST',
+    '/api/matches',
+    "create a match (body: CreateMatchRequest); answers with the remote seats' tokens",
+    ({ body }) => service.create(body as never),
+  );
   route('GET', '/api/matches', 'all matches', () => service.list());
   route('GET', '/api/matches/:id', 'status; ?after=N waits until round N is over', ({ params, query }) =>
-    service.status(params.id, query.has('after') ? int(query.get('after'), 'after') : undefined));
-  route('GET', '/api/matches/:id/view', 'a player\'s view of the round being planned (?player=N)', ({ params, query }) =>
-    service.view(params.id, int(query.get('player'), 'player')));
-  route('POST', '/api/matches/:id/orders', 'hand in orders (body: {player, orders}; header Authorization: Bearer <token>)',
+    service.status(params.id, query.has('after') ? int(query.get('after'), 'after') : undefined),
+  );
+  route('GET', '/api/matches/:id/view', "a player's view of the round being planned (?player=N)", ({ params, query }) =>
+    service.view(params.id, int(query.get('player'), 'player')),
+  );
+  route(
+    'POST',
+    '/api/matches/:id/orders',
+    'hand in orders (body: {player, orders}; header Authorization: Bearer <token>)',
     ({ params, body, req }) => {
       const { player, orders } = (body ?? {}) as { player?: unknown; orders?: unknown };
       const token = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? '')?.[1];
       return service.submit(params.id, int(player, 'player'), token, orders);
-    });
-  route('GET', '/api/matches/:id/rounds', 'what happened in each round (?since=N for the rounds after N)', ({ params, query }) =>
-    service.rounds(params.id, query.has('since') ? int(query.get('since'), 'since') : 0));
+    },
+  );
+  route(
+    'GET',
+    '/api/matches/:id/rounds',
+    'what happened in each round (?since=N for the rounds after N)',
+    ({ params, query }) => service.rounds(params.id, query.has('since') ? int(query.get('since'), 'since') : 0),
+  );
 
   route('POST', '/api/check', 'check orders (body: {state, player, orders}) → {problems}', ({ body }) => {
     const { state, player, orders } = body as { state: GameState; player: unknown; orders: unknown };
     return stateless(() => ({ problems: checkOrders(state, int(player, 'player'), list(orders)) }));
   });
-  route('POST', '/api/legal', 'every order that could be added (body: {state, player, orders?}) → {orders}', ({ body }) => {
-    const { state, player, orders } = body as { state: GameState; player: unknown; orders?: unknown };
-    return stateless(() => ({ orders: legalOrders(new OrderSheet(state, int(player, 'player'), list(orders ?? []) as Order[])) }));
-  });
-  route('POST', '/api/simulate', 'play a round on a copy (body: {state, orders: Order[][], lastRound?}) → {state, events}', ({ body }) => {
-    const { state, orders, lastRound } = body as { state: GameState; orders: unknown; lastRound?: boolean };
-    return stateless(() => simulate(state, list(orders).map((o) => list(o ?? []) as Order[]), { events: true, lastRound: !!lastRound }));
-  });
+  route(
+    'POST',
+    '/api/legal',
+    'every order that could be added (body: {state, player, orders?}) → {orders}',
+    ({ body }) => {
+      const { state, player, orders } = body as { state: GameState; player: unknown; orders?: unknown };
+      return stateless(() => ({
+        orders: legalOrders(new OrderSheet(state, int(player, 'player'), list(orders ?? []) as Order[])),
+      }));
+    },
+  );
+  route(
+    'POST',
+    '/api/simulate',
+    'play a round on a copy (body: {state, orders: Order[][], lastRound?}) → {state, events}',
+    ({ body }) => {
+      const { state, orders, lastRound } = body as { state: GameState; orders: unknown; lastRound?: boolean };
+      return stateless(() =>
+        simulate(
+          state,
+          list(orders).map((o) => list(o ?? []) as Order[]),
+          { events: true, lastRound: !!lastRound },
+        ),
+      );
+    },
+  );
 
   return createServer(async (req, res) => {
     cors(res);
     if (req.method === 'OPTIONS') return send(res, 204, null);
     const url = new URL(req.url ?? '/', 'http://localhost');
     try {
-      const match = routes
-        .map((r) => ({ r, m: r.pattern.exec(url.pathname) }))
-        .filter((x) => x.m);
+      const match = routes.map((r) => ({ r, m: r.pattern.exec(url.pathname) })).filter((x) => x.m);
       if (!match.length) throw new ServiceError(404, `no endpoint ${url.pathname}; see GET /api`);
       const hit = match.find((x) => x.r.method === req.method);
       if (!hit) throw new ServiceError(405, `${req.method} not allowed on ${url.pathname}`);
@@ -80,10 +140,10 @@ export function createApiServer({ service, registry }: ApiServerOptions): Server
       const body = req.method === 'POST' ? await readJson(req) : undefined;
       send(res, 200, await hit.r.handler({ params, query: url.searchParams, body, req }));
     } catch (error) {
-      if (error instanceof ServiceError) send(res, error.status, { error: error.message });
+      if (error instanceof ServiceError) send(res, error.status, { error: error.message } satisfies ApiErrorBody);
       else {
         console.error(error);
-        send(res, 500, { error: 'internal error' });
+        send(res, 500, { error: 'internal error' } satisfies ApiErrorBody);
       }
     }
   });

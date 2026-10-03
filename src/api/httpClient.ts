@@ -1,12 +1,15 @@
 import { Order } from '../engine/types';
 import { GameClient } from './client';
 import { MatchStatus, SubmitResult } from './match';
-import { CreateMatchRequest, CreateMatchResponse } from './protocol';
+import { ApiErrorBody, CreateMatchRequest, CreateMatchResponse } from './protocol';
 import { PlayerView } from './view';
 
 /** Error answered by the server. */
 export class ApiError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -17,8 +20,8 @@ async function call<T>(url: string, init: RequestInit = {}): Promise<T> {
     headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
   });
   const text = await response.text();
-  const body = text ? JSON.parse(text) : null;
-  if (!response.ok) throw new ApiError(response.status, body?.error ?? response.statusText);
+  const body: unknown = text ? JSON.parse(text) : null;
+  if (!response.ok) throw new ApiError(response.status, (body as ApiErrorBody | null)?.error ?? response.statusText);
   return body as T;
 }
 
@@ -39,7 +42,12 @@ export class HttpGameClient implements GameClient {
    * @param player The seat.
    * @param token The seat's token, returned when the match was created.
    */
-  constructor(server: string, matchId: string, readonly player: number, private readonly token: string) {
+  constructor(
+    server: string,
+    matchId: string,
+    readonly player: number,
+    private readonly token: string,
+  ) {
     this.base = `${trim(server)}/api/matches/${encodeURIComponent(matchId)}`;
   }
 

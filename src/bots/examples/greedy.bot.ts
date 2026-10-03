@@ -1,5 +1,15 @@
 import {
-  GameState, MERC, OrderSheet, PIECES, PlayerView, RESERVE, boardOf, defineBot, legalOrders, playerStrength, simulate,
+  GameState,
+  MERC,
+  OrderSheet,
+  PIECES,
+  PlayerView,
+  RESERVE,
+  boardOf,
+  defineBot,
+  legalOrders,
+  playerStrength,
+  simulate,
 } from '../../api';
 
 // Example bot that looks one round ahead with the real rules. It adds orders one at a time,
@@ -17,7 +27,9 @@ function score(state: GameState, me: number): number {
   value -= Math.max(0, ...rivals.filter((p) => p.alive).map((p) => playerStrength(state, p.id)));
   value += 200 * rivals.filter((p) => !p.alive).length;
 
-  const enemyHQs = state.armies.filter((a) => a.alive && a.controller !== me && a.controller !== MERC).map((a) => board.hq[a.id]);
+  const enemyHQs = state.armies
+    .filter((a) => a.alive && a.controller !== me && a.controller !== MERC)
+    .map((a) => board.hq[a.id]);
   for (const p of state.pieces) {
     if (p.loc === RESERVE || state.armies[p.army].controller !== me) continue;
     const node = board.nodes[p.loc];
@@ -40,7 +52,10 @@ function outcome(view: PlayerView, sheet: OrderSheet): number {
 export default defineBot({
   id: 'greedy',
   name: 'Greedy',
-  description: { en: 'Example bot: one-round lookahead, ignores rivals', es: 'Bot de ejemplo: mira una ronda, ignora a los rivales' },
+  description: {
+    en: 'Example bot: one-round lookahead, ignores rivals',
+    es: 'Bot de ejemplo: mira una ronda, ignora a los rivales',
+  },
   levels: false,
   order: 51,
   create: () => ({
