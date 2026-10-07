@@ -84,6 +84,7 @@ export { simulate } from './simulate';
 // ---- Bots
 export type { Bot, BotContext, BotDefinition, BotLevel, BotOptions, Localized, Rng } from './bot';
 export { BOT_LEVELS, defineBot, isBotLevel, localize } from './bot';
+export { BotRegistry, definitionsIn } from '../../../platform/core/botkit';
 export type { TurnOptions, TurnProblem } from './driver';
 export { playMatch, playTurn, timeSlicer } from './driver';
 export { makeRng, randomSeed, seatRng } from './random';

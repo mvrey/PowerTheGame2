@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { powerPackage } from '../../src/games/power/module';
+import { GAMES } from '../../src/games';
 import { verifyReplay } from '../../src/platform/core/verify';
 import { CappedText, LineSplitter } from '../../src/platform/node/lines';
 import { ManifestError, contentHash, readManifest } from '../../src/platform/node/manifest';
@@ -101,7 +102,11 @@ describe('line framing', () => {
 });
 
 describe('the starter templates', () => {
-  it.each(Object.entries(powerPackage.templates))('%s template ships the current SDK files', (_language, template) => {
+  it.each(
+    GAMES.flatMap((pkg) =>
+      Object.entries(pkg.templates).map(([language, template]) => [pkg.game.id, language, template!] as const),
+    ),
+  )('%s %s template ships the current SDK files', (_game, _language, template) => {
     for (const file of template!.sdk)
       expect(readFileSync(`${template!.dir}/${basename(file)}`, 'utf8'), file).toBe(readFileSync(file, 'utf8'));
   });

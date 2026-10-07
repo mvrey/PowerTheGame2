@@ -40,32 +40,39 @@ function imports(file: string): { local: string[]; packages: string[] } {
 
 const sources = (dir: string) => files(join(root, dir)).map((f) => ({ file: posix(relative(root, f)), ...imports(f) }));
 
+/** The games: every folder of src/games. */
+const GAMES = readdirSync(join(root, 'src/games')).filter((name) =>
+  statSync(join(root, 'src/games', name)).isDirectory(),
+);
+
+/**
+ * The layers of a game (ARCHITECTURE.md §5), and what each may import. A game never imports
+ * another game: what they share lives in the platform.
+ */
+function gameLayers(game: string): Record<string, string[]> {
+  const g = (layer: string) => `src/games/${game}/${layer}`;
+  return {
+    [g('engine')]: ['src/platform/core'],
+    [g('api')]: [g('engine'), 'src/platform/core'],
+    [g('bots')]: [g('api')],
+    [g('module')]: [g('api'), g('bots'), 'src/platform/core'],
+    [g('play')]: [g('api'), g('bots'), 'src/platform/core', 'src/platform/web'],
+    [g('viewer')]: [g('api'), g('play'), g('module'), 'src/platform/core', 'src/platform/web'],
+  };
+}
+
 /** Which project folders each layer may import (besides itself). */
 const ALLOWED: Record<string, string[]> = {
   'src/platform/core': [],
   'src/platform/node': ['src/platform/core'],
   'src/platform/web': ['src/platform/core'],
-  'src/games/power/engine': [],
-  'src/games/power/api': ['src/games/power/engine', 'src/platform/core'],
-  'src/games/power/bots': ['src/games/power/api'],
-  'src/games/power/module': ['src/games/power/api', 'src/games/power/bots', 'src/platform/core'],
-  'src/games/power/play': ['src/games/power/api', 'src/games/power/bots', 'src/platform/web'],
-  'src/games/power/viewer': [
-    'src/games/power/api',
-    'src/games/power/play',
-    'src/games/power/module',
-    'src/platform/core',
-    'src/platform/web',
-  ],
+  ...Object.assign({}, ...GAMES.map(gameLayers)),
 };
 
 /** Layers that must run in a browser as well as in Node. */
 const PORTABLE = [
   'src/platform/core',
-  'src/games/power/engine',
-  'src/games/power/api',
-  'src/games/power/bots',
-  'src/games/power/module',
+  ...GAMES.flatMap((game) => ['engine', 'api', 'bots', 'module'].map((layer) => `src/games/${game}/${layer}`)),
 ];
 
 /** Layers that must not touch the DOM or browser storage. */
@@ -78,6 +85,15 @@ describe('architecture', () => {
         expect(
           [layer, ...allowed].some((ok) => within(dep, ok)),
           `${file} imports ${dep}`,
+        ).toBe(true);
+  });
+
+  it('every file of a game lies in one of its layers', () => {
+    for (const game of GAMES)
+      for (const { file } of sources(`src/games/${game}`))
+        expect(
+          Object.keys(gameLayers(game)).some((layer) => within(file, layer)),
+          `${file} is outside the layers of ${game}`,
         ).toBe(true);
   });
 

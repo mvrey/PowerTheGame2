@@ -1,0 +1,264 @@
+/* The base look shared by the games' screens and the viewer: colours, controls, dialogs. */
+:root {
+  --bg: #0b131f;
+  --panel: #152234;
+  --panel-2: #1c2d44;
+  --line: #2b4161;
+  --text: #e8eef7;
+  --muted: #8fa3bd;
+  --gold: #ffcf40;
+  --danger: #ff5252;
+  --ok: #51cf66;
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  overflow: hidden;
+}
+#app {
+  height: 100%;
+}
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+/* ---------------------------------------------------------------- controls */
+.btn {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    transform 0.06s;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) {
+  background: #26405f;
+  border-color: #44679a;
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.btn:focus-visible,
+.chip:focus-visible,
+select:focus-visible,
+.x:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.btn.primary {
+  background: linear-gradient(#ffd95a, #f0b400);
+  border-color: #b98900;
+  color: #2b2100;
+  font-weight: 700;
+}
+.btn.primary:hover:not(:disabled) {
+  background: linear-gradient(#ffe37a, #ffc21a);
+  border-color: #b98900;
+}
+.btn.danger {
+  border-color: var(--danger);
+  color: #ffb3b3;
+}
+.btn.small {
+  padding: 3px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn.wide {
+  flex: 1 1 100%;
+}
+.btn.big {
+  padding: 13px 18px;
+  font-size: 17px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.btn.big small {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.8;
+}
+select {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.muted {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--fill);
+  flex: none;
+}
+
+/* ------------------------------------------------------------------- modals */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: #050a12b8;
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: 14px;
+}
+.modal {
+  width: min(430px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid #44679a;
+  border-radius: 14px;
+  padding: 20px 22px;
+  box-shadow: 0 30px 80px #000d;
+}
+.modal.wide {
+  width: min(760px, 100%);
+}
+.modal h2 {
+  font-size: 22px;
+  margin-bottom: 12px;
+}
+.modal-body {
+  overflow-y: auto;
+  display: grid;
+  gap: 9px;
+  padding-right: 4px;
+}
+.modal-body h3 {
+  color: var(--gold);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 6px;
+}
+.modal-body ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  line-height: 1.45;
+}
+.modal-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.modal.stack .modal-buttons {
+  flex-direction: column;
+}
+.modal.stack .btn {
+  padding: 11px;
+}
+.opt {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+.opt input[type='range'] {
+  width: 180px;
+  accent-color: var(--gold);
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.stats th,
+.stats td {
+  padding: 6px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+.stats th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.stats th:first-child,
+.stats td:first-child {
+  text-align: left;
+}
+.stats tr.winner td {
+  color: var(--gold);
+  font-weight: 700;
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  background: #0b131f;
+  border: 1px solid var(--gold);
+  border-radius: 22px;
+  padding: 8px 18px;
+  z-index: 200;
+  box-shadow: 0 8px 24px #000c;
+  animation: toast 0.2s ease-out;
+  pointer-events: none;
+}
+@keyframes toast {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2f4667;
+  border-radius: 4px;
+}

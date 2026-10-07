@@ -1,3 +1,4 @@
+import { translator } from '../../../platform/web/i18n';
 import type { BoardNode, BotLevel, Mode, OrderError, PieceType } from '../api';
 import type { Speed } from './settings';
 
@@ -413,23 +414,14 @@ const en: Record<keyof typeof es, string> = {
 };
 
 export type Key = keyof typeof es;
-const TABLES: Record<Lang, Record<Key, string>> = { es, en };
-let lang: Lang = 'es';
+const texts = translator<Lang, Key>({ es, en }, 'es');
 
-export function setLang(next: Lang): void {
-  lang = next;
-  document.documentElement.lang = next;
-}
-export const getLang = () => lang;
-
-export function t(key: Key, ...args: (string | number)[]): string {
-  // A missing text shows its key rather than breaking the screen; tests/i18n.test.ts catches it.
-  const text = TABLES[lang][key] ?? key;
-  return text.replace(/\{(\d)\}/g, (_, i) => String(args[Number(i)] ?? ''));
-}
+export const setLang = texts.setLang;
+export const getLang = texts.getLang;
+export const t = texts.t;
 
 /** Whether `key` has a text in `language`. */
-export const hasTranslation = (key: string, language: Lang): boolean => key in TABLES[language];
+export const hasTranslation = texts.has;
 
 // Keys built from game data. The casts live here only; tests/i18n.test.ts checks that every
 // value of the data has its text in both languages.
