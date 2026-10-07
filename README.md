@@ -1,13 +1,67 @@
-# POWER
+# Bot Jam
 
-An unofficial digital adaptation of the board game **Power** (1981; Spear's Games edition of the
-90s), played in the browser against one to three AI generals.
+A platform for **recurring bot-programming competitions**. Participants write programs, in Python or
+JavaScript, that play a game on their own. The platform runs them in a sandbox, plays a World Cup
+style tournament between them, records verifiable replays, and shows the matches to a live audience.
+Every edition brings a new game. **Edition 1: Power** (1981), a strategy game of simultaneous orders.
 
-Power is a strategy game with no dice. Every round all players write up to five orders in secret,
-the orders are carried out at once, and battles are settled by adding up the power of the pieces
-on each space. You win by walking infantry into every rival headquarters and taking its flag.
+| I want to… | Read |
+|---|---|
+| write a bot | [Docs/Participants.md](Docs/Participants.md), then [Docs/Games/Power.md](Docs/Games/Power.md) |
+| run an edition, or stream it | [Docs/Organizer.md](Docs/Organizer.md) |
+| know the competition rules | [Docs/Tournament.md](Docs/Tournament.md) |
+| talk to the referee from any language | [Docs/Protocol.md](Docs/Protocol.md) |
+| check how untrusted code is contained | [Docs/Sandbox.md](Docs/Sandbox.md) |
+| understand the code, or add the next game | [ARCHITECTURE.md](ARCHITECTURE.md) |
 
-## Play
+## Quick start
+
+```
+npm install
+npm run jam -- new python bots/mybot                          # a starter bot (or: javascript)
+npm run jam -- check bots/mybot                               # does it play well-behaved matches?
+npm run jam -- match --bot bots/mybot --bot builtin:okoye:2   # one match, saved as replay.json
+npm run build && npm run jam -- serve .                       # watch it: http://127.0.0.1:8080/?replay=data/replay.json
+npm run jam -- tournament examples/tournament.json            # a whole World Cup, with built-in bots
+npm run jam -- help                                           # every command
+```
+
+Requirements: Node.js 22+, and Python 3.12+ for Python bots. Official matches run in Docker with
+gVisor on Linux ([Docs/Sandbox.md](Docs/Sandbox.md)).
+
+## What is in the box
+
+| | |
+|---|---|
+| **Referee** | Plays matches over a JSON-lines stdin/stdout protocol, with deadlines. Any misbehaviour costs the bot a turn, never stops the match, and is recorded. |
+| **Sandbox** | One hardened container per bot per match: no network, read-only, unprivileged, CPU/memory/process limits, gVisor. Safe unpacking of submission zips. |
+| **Replays** | Every raw answer, timing, failure, event and state hash, plus the exact version of each bot. `jam verify` plays any replay again and checks it. |
+| **Tournament** | Groups with seat-swapped duels and a free-for-all rotation, then a seeded knockout of series, a third-place match and an exhibition. Resumable and deterministic. |
+| **Viewer** | Tables, bracket, results and any match with a timeline, plus a self-directing broadcast mode for OBS. |
+| **SDKs** | `sdk/python`, `sdk/javascript`: the protocol loop and the game's helpers, standard library only. |
+| **Built-in bots** | Reference opponents: six AI generals at three levels, examples, and a generic Monte Carlo baseline. |
+
+## Repository
+
+```
+src/platform/   the game-agnostic platform: core (contracts, referee, replays, tournament), node (runners,
+                sandbox, executor), web (DOM helpers)
+src/games/      the games: power/ (engine, api, built-in bots, jam module, browser game, viewer renderer)
+src/jam/        the `jam` command          src/viewer/   the spectator viewer
+sdk/  templates/  sandbox/docker/  examples/  tools/research.ts (Phase-1 balance checks)
+tests/          platform/ (referee, runners, adversarial bots, submissions, tournament), power/, architecture
+Docs/           rules, protocol, sandbox, guides; Docs/Games/<game>.md
+```
+
+Commands: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format`, `npm run build`
+(the game and the viewer), `npm run jam -- <command>`, `npm run research`.
+
+## Edition 1: Power, the browser game
+
+You can also play Power yourself, in Spanish or English, against the built-in generals. It is
+the best way to get a feel for the game before writing a bot.
+
+### Play it
 
 - **Double-click `Jugar.bat`**, or open `dist/index.html` (or the root `index.html`) in a browser.
   No server and no connection are needed.
@@ -16,7 +70,7 @@ on each space. You win by walking infantry into every rival headquarters and tak
 The game is in Spanish and English (Options → Language). The full rules are inside the game,
 under **How to play**.
 
-### Controls
+#### Controls
 
 | Action | How |
 |---|---|
@@ -28,18 +82,18 @@ under **How to play**.
 | Cancel a selection / pause | `Esc` (or right click) |
 | Skip the animation | `Space` |
 
-### Game options
+#### Game options
 
 - **Map**: five boards (see below).
 - **Players**: 4 (free for all), 3 (the fourth army is mercenary and anyone may order it about)
   or 2 (two allied armies each).
 - **Rivals**: six generals with different temperaments, each at one of three levels
-  (Recruit, Captain, General), plus any bot you write (see below).
+  (Recruit, Captain, General), plus the example bots.
 - **Clocks**: the official 3-minute order clock and 2-hour game limit, both optional.
 
 The game saves itself at the start of every round.
 
-## Maps
+### Maps
 
 | Map | What changes |
 |---|---|
@@ -52,9 +106,9 @@ The game saves itself at the start of every round.
 Every map is checked by tests to be fair (all four armies see the same distances to their
 neighbours and have the same amount of land) and fully connected for every kind of unit.
 
-### Adding a map
+#### Adding a map
 
-Maps are plain text grids in `src/engine/maps.ts`. Each cell names the space it belongs to:
+Maps are plain text grids in `src/games/power/engine/maps.ts`. Each cell names the space it belongs to:
 
 | Cell | Meaning |
 |---|---|
@@ -82,34 +136,18 @@ Maps are plain text grids in `src/engine/maps.ts`. Each cell names the space it 
 - Every map needs the four armies, each with an HQ next to one of its sectors.
 - Rows and columns without sectors are drawn narrower; `cols` and `heights` override the sizes.
 
-Then add its name and description to `src/ui/i18n.ts` (`map.mymap`, `map.mymap.text`, in both
-languages; `tests/i18n.test.ts` fails until both are there). The board drawing, the movement
-tables and the bots all derive from the grid, and `tests/maps.test.ts` automatically checks the
+Then add its name and description to `src/games/power/play/i18n.ts` (`map.mymap`, `map.mymap.text`, in both
+languages; `tests/power/i18n.test.ts` fails until both are there). The board drawing, the movement
+tables and the bots all derive from the grid, and `tests/power/maps.test.ts` automatically checks the
 new map for soundness, fairness and full AI games.
 
-## Rules and assumptions
+### Rules and assumptions
 
-`PLAN.md` (in Spanish) lists the rules as implemented and the nine points where the rulebook is not explicit
-and a decision had to be made (for example, Megamissiles detonate once everyone has moved).
+`PLAN.md` (in Spanish) lists the rules as implemented and the nine points where the rulebook is
+not explicit and a decision had to be made (for example, Megamissiles detonate once everyone has
+moved). [Docs/Games/Power.md](Docs/Games/Power.md) has a one-page summary in English.
 
-## Write your own bot
-
-Opponents are pluggable. A bot is a file named `*.bot.ts` under `src/bots/` exporting a
-definition with a `decide(view, ctx)` function that returns the round's orders; it is picked up
-automatically and appears in the game's menus, in the arena and on the server. Bots can also be
-separate programs, in any language, that play over HTTP.
-
-```
-npm run arena -- bots=mybot,okoye:3,kruger,vega games=10   # headless tournament
-npm run server                                             # host matches over HTTP
-python examples/http_bot.py --vs kruger:1,vega:1,rookie    # a remote bot in Python
-```
-
-**[BOTS.md](BOTS.md)** is the guide: the bot contract, the toolkit (order sheets, legal orders,
-simulation with the real rules), testing, and the HTTP endpoints. `ARCHITECTURE.md` explains how
-the engine, its API, the bots and the hosts fit together.
-
-## How the generals play
+### How the generals play
 
 All players move at once, so there is no turn tree to search. Each general builds several candidate
 plans out of small tactics (defend the HQ, attack a space with just enough force, occupy enemy
@@ -118,28 +156,6 @@ rival the same way, plays every candidate against every scenario with the real r
 keeps the plan with the best outcome. The level sets how many plans and scenarios it weighs; the
 general's temperament weights both the tactics and the evaluation. It looks one round ahead.
 The generals are ordinary bots written against the public API (`src/bots/generals/`).
-
-## Code
-
-```
-src/engine/   Pure rules: maps, board graph, orders, round resolution (internal)
-src/api/      The engine's public API: Match, views, order sheets, legal orders, simulation,
-              the bot contract, local and HTTP clients
-src/bots/     Bot registry; the generals; example bots (Rookie, Greedy)
-src/ui/       Browser host: SVG board, menus, audio, languages, saving
-src/ui/game/  The game screen: planning, playback, panels, dialogs
-src/server/   HTTP server hosting matches for remote bots
-src/cli/      Command-line arguments shared by the server and the tools
-tests/        Vitest: rules, API, bots, maps, translations, HTTP server, architecture boundaries
-tools/        arena.ts (tournaments), remote-bot.ts (play on a server), render-midi.cjs (MIDI to WAV)
-examples/     http_bot.py, a bot in Python over HTTP
-Audio/        Original assets (WAV and MIDI)
-public/audio/ The same, converted to MP3 for the browser
-```
-
-Commands: `npm test`, `npm run build`, `npm run lint`, `npm run format`, `npm run arena`,
-`npm run server`, `npm run bot`.
-Adding `#autoplay` to the URL makes an AI play your seat, which is handy for debugging.
 
 The music was produced by rendering the MIDI files with `js-synthesizer` and the GeneralUser GS
 soundfont and encoding with ffmpeg; `tools/render-midi.cjs` needs both installed separately.

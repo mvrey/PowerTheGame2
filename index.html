@@ -15,11 +15,11 @@
   </head>
   <body>
     <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/games/power/play/main.ts"></script>
     <script>
       // This is the source page, which only works through the dev server.
       // Opened straight from disk, hand over to the built game.
-      if (location.protocol === 'file:' && document.querySelector('script[src="/src/main.ts"]')) {
+      if (location.protocol === 'file:' && document.querySelector('script[src="/src/games/power/play/main.ts"]')) {
         location.replace('dist/index.html');
       }
     </script>

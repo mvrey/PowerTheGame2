@@ -2,3 +2,7 @@ node_modules
 dist
 CLAUDE.md
 Docs/Plans/
+tournaments/
+submissions/
+/replay.json
+__pycache__/

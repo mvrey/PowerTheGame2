@@ -1,85 +1,100 @@
-# Architecture: engine, API, bots and hosts
+# Architecture
 
-Anyone can write a bot (an AI opponent) without touching the engine or the interface, and run it
-in the browser game, in headless tournaments, or as a separate program that plays over HTTP.
-This document explains how the pieces fit together; how to write a bot is in `BOTS.md`.
+A platform for recurring bot-programming jams. Each edition brings a game; the referee, the bot
+runner and sandbox, the replays, the tournament and the spectator viewer stay the same. Edition 1
+is **Power**.
 
-## 1. Layering
+## 1. Layers
 
 ```
-            ┌───────────────┐   ┌──────────────────┐   ┌─────────────────┐
-            │    src/ui     │   │   src/server     │   │ tools/, src/cli │
-            │ browser host  │   │ HTTP transport   │   │ arena, remote   │
-            └──────┬────────┘   └────────┬─────────┘   └───────┬─────────┘
-                   │      uses           │                     │
-            ┌──────▼─────────────────────▼─────────────────────▼─────────┐
-            │  src/bots     registry + bot implementations (generals,    │
-            │               examples). Bots import ONLY from src/api.    │
-            └──────────────────────────┬─────────────────────────────────┘
-            ┌──────────────────────────▼─────────────────────────────────┐
-            │  src/api      public API of the engine:                    │
-            │   Match (authoritative session: views, submit, resolve)    │
-            │   GameClient (what a bot talks to) + Local/Http clients    │
-            │   Bot contract, driver (runs a bot through a client)       │
-            │   toolkit: Board queries, OrderSheet, legalOrders, simulate│
-            └──────────────────────────┬─────────────────────────────────┘
-            ┌──────────────────────────▼─────────────────────────────────┐
-            │  src/engine   pure rules: maps, board graph, orders,       │
-            │               round resolution. Internal: only src/api     │
-            │               imports it.                                  │
-            └────────────────────────────────────────────────────────────┘
+ composition roots     src/jam/ (the `jam` CLI)                 src/viewer/ (spectator app)
+                              │  knows the platform and the games      │
+ ─────────────────────────────┼─────────────────────────────────────────┼──────────────
+ games                 src/games/index.ts, viewers.ts  (registries: one line per game)
+                       src/games/power/   engine → api → bots, module, play (browser game), viewer
+                              │  uses only the platform's contract (core) and web helpers
+ ─────────────────────────────┼─────────────────────────────────────────────────────
+ platform              src/platform/core/  game contract, protocol, referee, replays + verifier,
+                                           tournament logic, viewer contract   (portable, pure)
+                       src/platform/node/  runners (local, Docker, in-process), framing with limits,
+                                           manifests, zip unpacking, tournament executor, file server
+                       src/platform/web/   DOM helpers shared by the viewer and the games' UIs
+ outside the process   sdk/ (protocol helpers for bots), templates/ (starter bots), sandbox/docker/
 ```
 
-Rule enforced by a test (`tests/architecture.test.ts`): nothing outside `src/engine` and
-`src/api` imports `src/engine`; bots import nothing but `src/api`.
+`tests/architecture.test.ts` enforces the arrows: the platform never imports a game; games never
+import `platform/node`, the CLI or the viewer; `platform/core` and the game logic use no Node
+modules and no DOM, so they run in Node and in the browser alike (the viewer verifies replays
+with the same code as the CLI).
 
-## 2. Key abstractions
+## 2. A match, end to end
 
-| Piece | Responsibility (SRP) | Notes |
+```
+ jam match / jam tournament
+   └─ runner.launcher(bot) ── spawns the bot: docker run … (official) | local process | in-process built-in
+   └─ referee (runMatch)
+        hello ─► ready              per seat, with startup deadline
+        loop: game.toAct → game.observe → turn ─► action   (in parallel, with deadlines)
+              actionsOf(game.parseAction | game.noAction) → game.resolve → record turn + state hash
+        end ─► close (grace, then kill) → diagnostics (exit, stderr up to a limit, failure counts)
+   └─ Replay (JSON): setup, seeds, bot versions, raw answers, failures, timings, events, hashes, result
+ jam verify / the viewer
+   └─ verifyReplay: plays the raw answers through the game again; same problems, events, states, result
+```
+
+The referee is the only code that sees a bot's output. It turns every misbehaviour into a
+recorded failure and the game's "no action" (`Docs/Protocol.md`), so a bot can never stop a match.
+
+## 3. Contracts
+
+| Contract | File | What it decouples |
 |---|---|---|
-| `engine/board.ts` `Board`, `getBoard(id)` | Immutable board graph of one map, cached by id | Also the army ids and move ranges |
-| `engine/game.ts` | New games, read-only queries (strength, allowance, seating...) | Queries accept a `ReadonlyGameState` |
-| `engine/rules.ts`, `engine/resolve.ts` | Validate/apply an order; resolve a round | |
-| `api/match.ts` `Match` | One game session: hands out `PlayerView`s, validates and stores submitted orders, resolves the round when told, notifies listeners | Host-side; never given to bots. Its `state` is deeply read-only |
-| `api/view.ts` `PlayerView` | Plain JSON data a bot decides from: its seat, the full public state (a private copy), its armies and order allowance | Power is a perfect-information game: only orders are secret |
-| `api/orderSheet.ts` `OrderSheet` | Builds an order list step by step: checks each order against the allowance and against the board as the earlier orders leave it; `addAll` / `checkOrders` judge a whole list | Used by the UI's order sheet, the driver, `Match.submit` and bots |
-| `api/legal.ts` `legalOrders` | Enumerates every order that could be added to a sheet now | Makes simple bots trivial |
-| `api/simulate.ts` `simulate` | "What if": plays a round on a copy of a state with the real rules | The generals use it to weigh plans |
-| `api/random.ts` | Seedable random numbers; one stream per seat (`seatRng`) | Same seed, same game |
-| `api/bot.ts` `Bot`, `BotDefinition` | The bot contract: `decide(view, ctx) → orders`; a definition creates bots for a level | |
-| `api/client.ts` `GameClient` | What a bot talks to: `status`, `view`, `submit` | `LocalGameClient` (in process), `HttpGameClient` (server), interchangeable (LSP) |
-| `api/driver.ts` `playTurn`, `playMatch` | Runs a bot through any client; contains bot failures (exceptions, illegal orders) so a buggy bot cannot break a game | |
-| `api/protocol.ts` | JSON shapes of the HTTP API and `PROTOCOL_VERSION` | `GET /api` reports the version |
-| `bots/registry.ts` `BotRegistry` | Lists and creates bots by id | Bots are discovered automatically from `src/bots/**/*.bot.ts` (OCP: drop a file, it appears in menus, arena and server) |
-| `bots/generals/` | The generals: `planner.ts` (plan search), `tactics/` (the building blocks of a plan), `evaluate.ts` (position score, one function per term), `analysis.ts` (who could get where) | Written against `src/api` only |
-| `server/matchService.ts` | Matches on a server: seats, tokens, server-side bots, auto-resolve, order timeout | Transport-free, testable |
-| `server/http.ts` | JSON endpoints over `node:http` | Thin adapter over the service |
-| `ui/game/gameScreen.ts` | Hosts a `Match` in the browser: phases, wiring, rendering order | A coordinator; the work is done by the modules below |
-| `ui/game/planning.ts` | The human's order sheet and the clicks that build it | |
-| `ui/game/aiSeats.ts` | The bots of the AI seats, thinking in time slices while the human plans | |
-| `ui/game/playback.ts` | Animates a played round, one handler per event kind | |
-| `ui/game/clock.ts`, `names.ts`, `dialogs.ts`, `panels/` | Clocks, wording, dialogs, and the panels around the board | |
+| `GameModule<State, Action, Event>` | `platform/core/game.ts` | The referee, verifier and tournament from any game. Deterministic, pure functions: `setup`, `toAct`, `matchInfo`, `observe`, `parseAction`, `noAction`, `resolve`, `result`. |
+| `GamePackage` | `platform/core/bots.ts` | What an edition ships: the module, built-in bots, starter templates, defaults. |
+| Protocol v1 | `platform/core/protocol.ts`, `Docs/Protocol.md` | Bots in any language from the platform: JSON lines over stdio. |
+| `BotConnection` / `Runner` | `platform/core/referee.ts`, `platform/node/runners.ts` | The referee from how bots are hosted (sandbox, local, in-process). |
+| `Replay` | `platform/core/replay.ts` | Recording from reproduction and display. |
+| `WorldCupConfig` → `planTournament` | `platform/core/tournament/` | The tournament state is a pure function of config, seed and results: resumable, auditable. |
+| `ViewerPlugin` / `ReplayRenderer` | `platform/core/viewer.ts` | The viewer's timeline, tables and broadcast mode from how a game draws a position. |
 
-SOLID in short: each module has one reason to change (S); new bots and transports plug in
-without edits to the engine, UI or server (O); every `GameClient` and every `Bot` is
-interchangeable (L); bots see a small `GameClient` / `PlayerView` / toolkit surface, not the
-`Match` (I); bots, UI, server and tools depend on the `src/api` abstractions, never on engine
-internals (D).
+## 4. Decisions worth knowing
 
-## 3. Decisions worth knowing
+- **One process per bot per match**, with the full state in every observation: no startup cost
+  per turn, and memory within a match is allowed but never needed (Design §5, Option B).
+- **Seats are anonymous** inside the game: no opponent-specific hardcoding.
+- **Replays store raw answers, not observations.** Observations can be recomputed, and parsing them
+  again checks the parser too. Hashes of every state catch any divergence.
+- **The viewer recomputes positions** from the replay through the game module, so the replay
+  stays small. It never decides anything: it verifies the replay and shows the recorded result.
+- **Built-in bots run in-process** (trusted organizer code). Participants' code never does.
+- **No build step for bots** (Python and JavaScript, standard library only): nothing to compile,
+  nothing to download, no build-time attack surface. Compiled languages would add a restricted
+  build stage before the runner (future work).
+- **Power's browser game** (`src/games/power/play`) stays: participants can play the game they
+  are writing bots for, against the built-in generals.
 
-- **Views carry the whole state.** Power hides only the orders being written, so there is nothing
-  to filter; a view is a deep copy, so bots cannot tamper with the game.
-- **Read-only where it matters.** The live state (`Match.state`) and an order sheet's preview are
-  typed `ReadonlyGameState`, so the compiler stops a host or a bot from changing them by accident.
-- **Submissions are all or nothing** at the `Match` level (a clear contract for remote clients),
-  while the bot driver is forgiving: it drops illegal orders, keeps the rest and reports them.
-  A bot bug never stalls or crashes a game.
-- **Bots are asynchronous and cooperative** (`await ctx.checkpoint()`), not run in a Web Worker:
-  workers are unreliable from `file://`, which is how the game is distributed.
-- **Stateless rules endpoints** (`/api/legal`, `/api/check`, `/api/simulate`) let bots in other
-  languages use the real rules instead of reimplementing them.
-- **The protocol is versioned.** Orders and events say what they are in `kind`; breaking
-  changes bump `PROTOCOL_VERSION` and are listed in `BOTS.md`.
-- **Saves** went from v2 to v3 (AI seats name a `bot` instead of a `general`); v2 saves and stored
-  setups are migrated on load. A saved state holds no orders, so protocol changes need no migration.
+## 5. Adding a game (next edition)
+
+1. `src/games/<game>/`: the rules (keep them pure and deterministic), and a `module/` implementing
+   `GameModule` + a `GamePackage` (formats with a 2-player one for duels; variants; defaults; a
+   sparring built-in bot).
+2. The JSON your bots see and send: document it in `Docs/Games/<Game>.md` and bump the game's
+   `version` whenever it changes.
+3. `sdk/python/<game>.py`, `sdk/javascript/<game>.mjs` and `templates/<game>/{python,javascript}`
+   with a working starter bot (the test checks the templates carry the current SDK files).
+4. A `viewer/` implementing `ViewerPlugin` (draw a position, animate a turn, describe the seats).
+5. Register it: one line in `src/games/index.ts`, one in `src/games/viewers.ts`, and its layers in
+   `tests/architecture.test.ts`.
+6. Tests: rules, the module (parse, placements, a full match with a verified replay), and
+   `npm run research` for balance and the generic-baseline check (Design §2).
+
+Nothing in `src/platform`, `src/jam` or `src/viewer` should need to change. If something does,
+the contract is missing a hook: add it to the contract, not to the platform code.
+
+## 6. Power (edition 1) inside
+
+`engine` (rules, maps as text grids) ← `api` (Match, OrderSheet, legalOrders, simulate, the TS bot
+contract) ← `bots` (the generals: a planner over tactics with simulation; examples; the Monte Carlo
+baseline) ← `module` (the GameModule: anonymous seats, observations with the legal first orders and
+the previous round, placements by survival and material) and `play` (the browser game) and
+`viewer` (the renderer, reusing the game's board, army cards and round animation).

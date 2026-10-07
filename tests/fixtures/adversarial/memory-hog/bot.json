@@ -1,0 +1,5 @@
+{
+  "name": "memory-hog",
+  "language": "python",
+  "entry": "main.py"
+}

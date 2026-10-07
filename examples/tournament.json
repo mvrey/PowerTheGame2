@@ -1,0 +1,25 @@
+{
+  "id": "demo-cup",
+  "title": "Demo Cup",
+  "game": "power",
+  "seed": 1,
+  "bots": [
+    "builtin:okoye:1",
+    "builtin:kruger:1",
+    "builtin:vega:1",
+    "builtin:ivanova:1",
+    "builtin:tanaka:1",
+    "builtin:dubois:1",
+    "builtin:greedy",
+    "builtin:rookie",
+    "../templates/power/python",
+    "../templates/power/javascript"
+  ],
+  "format": {
+    "duel": { "variants": ["classic"], "maxTurns": 40 },
+    "ffa": { "maxTurns": 40 },
+    "playoff": { "maxTurns": 40 }
+  },
+  "runner": { "type": "local" },
+  "concurrency": 4
+}

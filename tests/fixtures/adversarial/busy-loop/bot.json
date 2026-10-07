@@ -1,0 +1,5 @@
+{
+  "name": "busy-loop",
+  "language": "python",
+  "entry": "main.py"
+}

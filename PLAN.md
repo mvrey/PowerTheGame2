@@ -89,18 +89,9 @@ Gana quien capture todas las banderas rivales. Límite oficial de 2 h: gana el m
 
 ## 3. Arquitectura
 
-Desde el 2026-10-03 el motor ofrece una API pública y las IAs son bots enchufables; el detalle
-está en `ARCHITECTURE.md` (inglés) y la guía para escribir bots en `BOTS.md`.
-
-```
-src/engine/   board.ts (grafo por mapa), types.ts, rules.ts (órdenes), resolve.ts (ronda + eventos), game.ts
-src/api/      API pública: Match, vistas, OrderSheet, órdenes legales, simulación, contrato de bot, clientes
-src/bots/     registro de bots; generales (planificador); bots de ejemplo
-src/ui/       anfitrión en navegador: menús, juego, tablero, audio, i18n, guardado
-src/server/   servidor HTTP para bots remotos
-tests/        reglas, API, bots, mapas, servidor, límites de la arquitectura
-tools/        arena (torneos), remote-bot, render de MIDI
-```
+Superada: desde el 2026-10-04 el proyecto es una plataforma de competiciones de bots y Power es su
+primera edición. El juego vive en `src/games/power/` (motor, API, bots, módulo para la plataforma,
+juego en navegador y visor). La arquitectura actual está en `ARCHITECTURE.md` (inglés).
 
 ## 4. UX
 - Menú principal: Nueva partida, Continuar, Cómo jugar, Opciones.

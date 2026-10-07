@@ -1,66 +1,107 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// The layering of ARCHITECTURE.md, checked on the import statements:
-//   engine  <-  api  <-  bots  <-  ui / server / tools
-// Only src/api may import src/engine, and bots may import nothing but src/api (and each other).
+// The layering of ARCHITECTURE.md, checked on the import statements. The platform knows no game;
+// a game knows the platform's contract (platform/core) but never its Node side; only the
+// composition roots (src/jam, src/viewer) know both.
 
 const root = resolve(__dirname, '..');
 
 function files(dir: string): string[] {
+  if (!existsSync(dir)) return [];
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) out.push(...files(path));
-    else if (path.endsWith('.ts')) out.push(path);
+    else if (/\.(ts|mts)$/.test(path)) out.push(path);
   }
   return out;
 }
 
-/** Project-relative paths (with forward slashes) of the local modules a file imports. */
-function imports(file: string): string[] {
+const posix = (path: string) => path.split(sep).join('/');
+/** Whether a module path lies in a folder (a folder import names the folder itself). */
+const within = (path: string, folder: string) => path === folder || path.startsWith(folder + '/');
+
+/** Project-relative paths of the local modules a file imports, and the bare modules it imports. */
+function imports(file: string): { local: string[]; packages: string[] } {
   const source = readFileSync(file, 'utf8');
-  const out: string[] = [];
-  for (const m of source.matchAll(/(?:import|export)[^'"]*?from\s+['"](\.[^'"]+)['"]/g))
-    out.push(
-      relative(root, resolve(file, '..', m[1]))
-        .split(sep)
-        .join('/'),
-    );
-  return out;
+  const local: string[] = [];
+  const packages: string[] = [];
+  for (const m of source.matchAll(
+    /(?:import|export)[^'"]*?from\s+['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g,
+  )) {
+    const spec = m[1] ?? m[2];
+    if (spec.startsWith('.')) local.push(posix(relative(root, resolve(file, '..', spec))));
+    else packages.push(spec);
+  }
+  return { local, packages };
 }
 
-const layer = (path: string) => path.split('/').slice(0, 2).join('/');
-const sources = (dir: string) =>
-  files(join(root, dir)).map((f) => ({ file: relative(root, f).split(sep).join('/'), deps: imports(f) }));
+const sources = (dir: string) => files(join(root, dir)).map((f) => ({ file: posix(relative(root, f)), ...imports(f) }));
+
+/** Which project folders each layer may import (besides itself). */
+const ALLOWED: Record<string, string[]> = {
+  'src/platform/core': [],
+  'src/platform/node': ['src/platform/core'],
+  'src/platform/web': ['src/platform/core'],
+  'src/games/power/engine': [],
+  'src/games/power/api': ['src/games/power/engine', 'src/platform/core'],
+  'src/games/power/bots': ['src/games/power/api'],
+  'src/games/power/module': ['src/games/power/api', 'src/games/power/bots', 'src/platform/core'],
+  'src/games/power/play': ['src/games/power/api', 'src/games/power/bots', 'src/platform/web'],
+  'src/games/power/viewer': [
+    'src/games/power/api',
+    'src/games/power/play',
+    'src/games/power/module',
+    'src/platform/core',
+    'src/platform/web',
+  ],
+};
+
+/** Layers that must run in a browser as well as in Node. */
+const PORTABLE = [
+  'src/platform/core',
+  'src/games/power/engine',
+  'src/games/power/api',
+  'src/games/power/bots',
+  'src/games/power/module',
+];
+
+/** Layers that must not touch the DOM or browser storage. */
+const HEADLESS = [...PORTABLE, 'src/platform/node', 'src/jam'];
 
 describe('architecture', () => {
-  it('only the API imports the engine', () => {
-    for (const dir of ['src/bots', 'src/ui', 'src/server', 'src/cli', 'tools'])
-      for (const { file, deps } of sources(dir))
-        for (const dep of deps) expect(layer(dep), `${file} imports ${dep}`).not.toBe('src/engine');
+  it.each(Object.entries(ALLOWED))('%s imports only what its layer allows', (layer, allowed) => {
+    for (const { file, local } of sources(layer))
+      for (const dep of local)
+        expect(
+          [layer, ...allowed].some((ok) => within(dep, ok)),
+          `${file} imports ${dep}`,
+        ).toBe(true);
   });
 
-  it('bots depend on the API only', () => {
-    for (const { file, deps } of sources('src/bots'))
-      for (const dep of deps) expect(['src/api', 'src/bots'], `${file} imports ${dep}`).toContain(layer(dep));
+  it('games never reach into the platform runtime or the composition roots', () => {
+    for (const { file, local } of sources('src/games'))
+      for (const dep of local)
+        expect(
+          ['src/platform/node', 'src/jam', 'src/viewer'].some((root) => within(dep, root)),
+          `${file} imports ${dep}`,
+        ).toBe(false);
   });
 
-  it('the engine and the API know nothing of bots, interface or server', () => {
-    for (const dir of ['src/engine', 'src/api'])
-      for (const { file, deps } of sources(dir))
-        for (const dep of deps) expect(['src/engine', 'src/api'], `${file} imports ${dep}`).toContain(layer(dep));
+  it('the platform knows no game', () => {
+    for (const { file, local } of sources('src/platform'))
+      for (const dep of local) expect(within(dep, 'src/games'), `${file} imports ${dep}`).toBe(false);
   });
 
-  it('the engine does not import the API', () => {
-    for (const { file, deps } of sources('src/engine'))
-      for (const dep of deps) expect(layer(dep), `${file} imports ${dep}`).toBe('src/engine');
+  it.each(PORTABLE)('%s runs in the browser too: no Node modules', (layer) => {
+    for (const { file, packages } of sources(layer))
+      for (const pkg of packages) expect(pkg.startsWith('node:'), `${file} imports ${pkg}`).toBe(false);
   });
 
-  it('nothing outside the browser interface touches the DOM or browser storage', () => {
-    for (const dir of ['src/engine', 'src/api', 'src/bots'])
-      for (const { file } of sources(dir))
-        expect(readFileSync(join(root, file), 'utf8'), file).not.toMatch(/\b(document|window|localStorage)\./);
+  it.each(HEADLESS)('%s does not touch the DOM or browser storage', (layer) => {
+    for (const { file } of sources(layer))
+      expect(readFileSync(join(root, file), 'utf8'), file).not.toMatch(/\b(document|window|localStorage)\./);
   });
 });

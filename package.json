@@ -5,16 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build --config vite.viewer.config.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "server": "vite-node src/server/main.ts",
-    "arena": "vite-node tools/arena.ts",
-    "bot": "vite-node tools/remote-bot.ts"
+    "jam": "vite-node src/jam/cli.ts --",
+    "dev:viewer": "vite --config vite.viewer.config.ts",
+    "research": "vite-node tools/research.ts --"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

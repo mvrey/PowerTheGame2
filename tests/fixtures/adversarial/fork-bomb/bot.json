@@ -1,0 +1,5 @@
+{
+  "name": "fork-bomb",
+  "language": "python",
+  "entry": "main.py"
+}

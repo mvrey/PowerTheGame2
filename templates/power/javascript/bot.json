@@ -1,0 +1,5 @@
+{
+  "name": "JS Starter",
+  "language": "javascript",
+  "entry": "main.mjs"
+}
