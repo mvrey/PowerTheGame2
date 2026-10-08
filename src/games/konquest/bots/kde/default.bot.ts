@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2003 Russell Steffen, 2003 Stephan Zehetner, 2006 Dmitry Suzdalev,
+//   2006 Inge Wallin, 2006 Pierre Ducroquet (KDE Konquest); port for this project.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 import { FleetOrder, defineBot, distance } from '../../api';
 import { inGridOrder } from './grid';
 

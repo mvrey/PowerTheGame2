@@ -54,7 +54,7 @@ export const COMMANDS: Record<string, Command> = {
   match: {
     usage:
       'match --bot <bot> --bot <bot> [...]    play one match; bots are folders or builtin:<id>\n' +
-      '      [--game power] [--format duel] [--variant classic] [--turns 60] [--seed n]\n' +
+      '      [--game <game>] [--format duel] [--variant classic] [--turns 60] [--seed n]\n' +
       '      [--runner local|docker] [--runtime runsc|none] [--turn-ms 2000] [--out replay.json]',
     async run(args) {
       const pkg = game(args);
@@ -88,7 +88,7 @@ export const COMMANDS: Record<string, Command> = {
   },
 
   check: {
-    usage: 'check <bot folder> [--game power] [--turns 12]   validate a bot and play it from both seats',
+    usage: 'check <bot folder> [--game <game>] [--turns 12]   validate a bot and play it from both seats',
     async run(args) {
       const pkg = game(args);
       const dir = args.positional[0];
@@ -136,7 +136,7 @@ export const COMMANDS: Record<string, Command> = {
   },
 
   new: {
-    usage: 'new <python|javascript> <folder> [--game power]   start a bot from the starter template',
+    usage: 'new <python|javascript> <folder> [--game <game>]   start a bot from the starter template',
     async run(args) {
       const pkg = game(args);
       const [language, folder] = args.positional as [Language, string];
@@ -152,7 +152,8 @@ export const COMMANDS: Record<string, Command> = {
           .replace(/[^\p{L}\p{N} ._-]/gu, '-')
           .slice(0, 32) || manifest.name;
       writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-      console.log(`Created ${folder}. Try it: npm run jam -- check ${folder}`);
+      const gameFlag = pkg === GAMES[0] ? '' : ` --game ${pkg.game.id}`;
+      console.log(`Created ${folder}. Try it: npm run jam -- check ${folder}${gameFlag}`);
       return 0;
     },
   },

@@ -1,0 +1,25 @@
+{
+  "id": "konquest-demo-cup",
+  "title": "Konquest Demo Cup",
+  "game": "konquest",
+  "seed": 2,
+  "bots": [
+    "builtin:becai",
+    "builtin:kde:1",
+    "builtin:kde:2",
+    "builtin:kde:3",
+    "builtin:greedy",
+    "builtin:rookie",
+    "builtin:montecarlo:1",
+    "builtin:passive",
+    "../templates/konquest/python",
+    "../templates/konquest/javascript"
+  ],
+  "format": {
+    "duel": { "variants": ["small"], "maxTurns": 80 },
+    "ffa": { "maxTurns": 80 },
+    "playoff": { "variants": ["small"], "maxTurns": 80 }
+  },
+  "runner": { "type": "local" },
+  "concurrency": 4
+}

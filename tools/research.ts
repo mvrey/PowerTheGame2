@@ -73,13 +73,8 @@ console.log(
   `${pkg.game.id} ${pkg.game.version}: ${games} games per line, ${turns} turns, maps ${pkg.defaults.variants.join(', ')}\n`,
 );
 console.log('Seat balance (seat 0 with the same bot on both sides):');
-for (const bot of ['builtin:okoye:2', 'builtin:montecarlo:2'])
+for (const bot of pkg.research.balance.map((id) => `builtin:${id}`))
   console.log(`  ${bot.padEnd(22)} ${show(await seatBalance(pkg, bot))}`);
 console.log('\nGeneric search against hand-written strategy (from the search side):');
-for (const [a, b] of [
-  ['builtin:montecarlo:1', 'builtin:rookie'],
-  ['builtin:montecarlo:2', 'builtin:greedy'],
-  ['builtin:montecarlo:2', 'builtin:okoye:2'],
-  ['builtin:montecarlo:3', 'builtin:okoye:3'],
-])
+for (const [a, b] of pkg.research.versus.map(([x, y]) => [`builtin:${x}`, `builtin:${y}`]))
   console.log(`  ${a} vs ${b}: ${show(await series(pkg, a, b))}`);

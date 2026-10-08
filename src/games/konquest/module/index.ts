@@ -18,4 +18,13 @@ export const konquestPackage: GamePackage = {
     },
   },
   defaults: { maxTurns: 100, variants: ['standard', 'small', 'large'], sparring: 'rookie' },
+  research: {
+    balance: ['becai', 'montecarlo:2'],
+    versus: [
+      ['montecarlo:1', 'rookie'],
+      ['montecarlo:2', 'greedy'],
+      ['montecarlo:2', 'kde:2'],
+      ['montecarlo:3', 'becai'],
+    ],
+  },
 };

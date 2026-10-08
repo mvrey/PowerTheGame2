@@ -16,4 +16,13 @@ export const powerPackage: GamePackage = {
     javascript: { dir: 'templates/power/javascript', sdk: ['sdk/javascript/jam.mjs', 'sdk/javascript/power.mjs'] },
   },
   defaults: { maxTurns: 60, variants: ['classic', 'ring', 'continent'], sparring: 'rookie' },
+  research: {
+    balance: ['okoye:2', 'montecarlo:2'],
+    versus: [
+      ['montecarlo:1', 'rookie'],
+      ['montecarlo:2', 'greedy'],
+      ['montecarlo:2', 'okoye:2'],
+      ['montecarlo:3', 'okoye:3'],
+    ],
+  },
 };

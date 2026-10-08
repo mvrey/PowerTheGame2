@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2013 Alexander Schuch (KDE Konquest); port for this project.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 import { FleetOrder, NEUTRAL, Planet, defineBot, distance } from '../../api';
 import { inGridOrder } from './grid';
 

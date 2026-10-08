@@ -12,7 +12,7 @@ must confirm and publish before the jam opens.
   seat**. Seat swapping cancels any advantage of colour or of acting first.
   Win **3**, draw **1**, loss **0**.
 - **Free-for-all set.** If the game has a free-for-all for the group's size (Power: 3 and 4
-  players), the whole group plays it once per seat rotation: every bot plays every seat once,
+  players; Konquest: 4 and 6), the whole group plays it once per seat rotation: every bot plays every seat once,
   against the same opponents. **One point per opponent finished ahead of** (4 players: 3/2/1/0).
   The rotation evens out positional luck, and "kingmaking" can only cost a bot what it costs everyone.
   The duels carry most of the points (24 duels against 4 free-for-alls in a group of 4).
@@ -33,8 +33,9 @@ must confirm and publish before the jam opens.
 
 ## 3. Matches
 
-- Each match lasts at most `maxTurns` turns (Power: 60 rounds). The game then decides the winner
-  by its own rule (Power: the most material, then the most flags).
+- Each match lasts at most `maxTurns` turns (Power: 60 rounds; Konquest: 100 turns). The game then
+  decides the winner by its own rule (Power: the most material, then the most flags; Konquest:
+  survival, then planets, then ships).
 - **Time:** `startupMs` 10 s to get ready, `turnMs` 2 s per turn. Identical for everyone, on
   identical sandboxes (1 CPU, 256 MiB).
 - **Failures** (timeouts, invalid output, crashes) cost the turn, never the match: see the table
