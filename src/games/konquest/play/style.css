@@ -1,0 +1,499 @@
+@import '../../../platform/web/ui.css';
+
+/* Konquest's own look. Everything is scoped (kq-…) so that the spectator viewer can load it next
+   to other games' styles. */
+
+.kq-page {
+  --bg: #050816;
+  --panel: #0e1530;
+  --panel-2: #172042;
+  --line: #2a3768;
+  --gold: #ffe066;
+  background: radial-gradient(ellipse at 30% 20%, #101a3d 0%, #050816 60%) fixed;
+}
+
+/* ------------------------------------------------------------------ galaxy */
+.kq-galaxy {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+.kq-svg {
+  width: min(100cqw, 100cqh * var(--ratio, 1));
+  height: min(100cqh, 100cqw / var(--ratio, 1));
+  display: block;
+  user-select: none;
+}
+.kq-grid rect {
+  fill: #070c22;
+  stroke: #24305e;
+  stroke-width: 2;
+}
+.kq-grid line {
+  stroke: #ffffff10;
+  stroke-width: 1;
+}
+.kq-planet {
+  cursor: pointer;
+}
+.kq-hit {
+  fill: transparent;
+}
+.kq-planet:hover .kq-hit,
+.kq-planet.hovered .kq-hit {
+  fill: #ffffff0d;
+}
+.kq-ring {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 3;
+  opacity: 0.9;
+}
+.kq-body {
+  stroke: #0008;
+  stroke-width: 1;
+}
+.kq-planet.selected .kq-ring {
+  stroke: var(--gold, #ffe066);
+  stroke-width: 4;
+  stroke-dasharray: 6 4;
+  animation: kq-spin 4s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes kq-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.kq-name,
+.kq-ships,
+.kq-fleet text,
+.kq-route text {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  paint-order: stroke;
+  stroke: #000;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.kq-name {
+  font-size: 10px;
+  font-weight: 700;
+  fill: var(--c);
+}
+.kq-ships {
+  font-size: 11px;
+  font-weight: 800;
+  fill: #fff;
+  text-anchor: middle;
+}
+.kq-fleet path {
+  fill: var(--c);
+  stroke: #000;
+  stroke-width: 1;
+}
+.kq-fleet text {
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--c);
+  text-anchor: middle;
+}
+.kq-trail {
+  stroke: var(--c);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+  opacity: 0.45;
+}
+.kq-route line {
+  stroke: var(--gold, #ffe066);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+.kq-route text {
+  font-size: 11px;
+  font-weight: 800;
+  fill: var(--gold, #ffe066);
+  text-anchor: middle;
+}
+.kq-route.standing line {
+  opacity: 0.5;
+  stroke-dasharray: 2 4;
+}
+.kq-burst {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 3;
+  animation: kq-burst 0.5s ease-out forwards;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.kq-burst.conquered {
+  stroke-width: 5;
+}
+.kq-burst.reinforce {
+  stroke-dasharray: 3 3;
+}
+@keyframes kq-burst {
+  from {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* -------------------------------------------------------------------- menus */
+.kq-backdrop .kq-galaxy {
+  width: 100vw;
+  height: 100vh;
+}
+.kq-title {
+  font-family: 'Arial Black', Impact, 'Segoe UI Black', sans-serif;
+  font-size: 54px;
+  letter-spacing: 5px;
+  line-height: 1;
+  background: linear-gradient(#ffffff, #8282ff 55%, #3b3bb8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 6px 18px #000c);
+}
+.kq-setup-box {
+  width: min(1060px, 100%);
+  background: #0b1230e6;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 20px 60px #000a;
+  backdrop-filter: blur(4px);
+}
+.kq-setup-box h2 {
+  font-size: 22px;
+}
+.kq-setup-box h3,
+.kq-side h3 {
+  font-size: 11.5px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 14px 0 7px;
+}
+.kq-setup-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.kq-galaxies {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+.kq-card {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 9px;
+  cursor: pointer;
+  text-align: left;
+  display: grid;
+  gap: 2px;
+}
+.kq-card small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.kq-card:hover {
+  border-color: #4a5fa8;
+}
+.kq-card.on {
+  border-color: var(--gold);
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+.kq-custom {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+.kq-preview {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+.kq-preview .kq-galaxy {
+  height: 260px;
+}
+.kq-check {
+  cursor: pointer;
+}
+.kq-check small {
+  display: block;
+}
+.opt.kq-check {
+  padding: 3px 0;
+}
+.kq-seat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+.kq-seat .swatch {
+  width: 14px;
+  height: 14px;
+}
+.kq-seat select {
+  max-width: 150px;
+}
+input.kq-name,
+input.kq-num {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  min-width: 0;
+}
+input.kq-name {
+  flex: 1;
+}
+input.kq-num {
+  width: 72px;
+}
+.x {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.x:hover {
+  color: var(--danger);
+  background: #ff52521a;
+}
+
+/* --------------------------------------------------------------------- game */
+.kq-game {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: auto 1fr;
+}
+.kq-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.kq-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.kq-logo {
+  letter-spacing: 3px;
+  color: #a5a5ff;
+}
+.kq-turn {
+  font-weight: 700;
+}
+.kq-who {
+  color: var(--c);
+  font-weight: 700;
+}
+.kq-tools {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.kq-main {
+  position: relative;
+  min-height: 0;
+  padding: 10px;
+}
+.kq-side {
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  padding: 12px 14px;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.kq-composer {
+  display: grid;
+  gap: 8px;
+}
+.kq-from {
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--c);
+}
+.kq-ships-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kq-ships-row label {
+  flex: 1;
+}
+.kq-range {
+  width: 100%;
+  accent-color: var(--gold);
+}
+.kq-end {
+  margin-top: 4px;
+  font-size: 16px;
+  padding: 11px;
+}
+.kq-pulse {
+  animation: kq-pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes kq-pulse {
+  to {
+    opacity: 0.4;
+  }
+}
+.kq-order {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid #ffffff0d;
+  font-size: 13px;
+}
+.kq-log {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  font-size: 12.5px;
+  display: grid;
+  align-content: start;
+  gap: 3px;
+}
+.kq-msg {
+  border-left: 3px solid var(--c, transparent);
+  padding-left: 6px;
+}
+.kq-msg.turn {
+  color: var(--muted);
+  border: 0;
+  padding: 4px 0 0;
+}
+.kq-tip {
+  position: absolute;
+  display: none;
+  min-width: 170px;
+  background: #0b1230f2;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 8px 24px #000a;
+  font-size: 12.5px;
+}
+.kq-tip.open {
+  display: grid;
+  gap: 2px;
+}
+.kq-tip-title {
+  font-weight: 800;
+  color: var(--c);
+  margin-bottom: 3px;
+}
+.kq-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kq-row span {
+  color: var(--muted);
+}
+.kq-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  background: #050816ee;
+  z-index: 20;
+}
+.kq-overlay.open {
+  display: grid;
+}
+.kq-handover {
+  text-align: center;
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+}
+.kq-handover h2 {
+  color: var(--c);
+  font-size: 28px;
+}
+.kq-stats-wrap {
+  overflow-x: auto;
+}
+.stats tr.out td {
+  opacity: 0.55;
+}
+.modal.neutral h2 {
+  color: var(--gold);
+}
+
+/* ---------------------------------------------------------------- spectator */
+.kq-spectator {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  background: radial-gradient(ellipse at 30% 20%, #101a3d 0%, #050816 60%);
+}
+.kq-spectator .kq-main {
+  padding: 8px;
+}
+.kq-spectator .kq-side {
+  border-left: 1px solid #2a3768;
+}
+
+/* ----------------------------------------------------------- narrow screens */
+@media (max-width: 900px) {
+  .kq-game,
+  .kq-spectator {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 70vh auto;
+    height: auto;
+  }
+  .kq-spectator {
+    grid-template-rows: 70vh auto;
+  }
+  .kq-page {
+    overflow: auto;
+  }
+  .kq-setup-cols {
+    grid-template-columns: 1fr;
+  }
+  .kq-side {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kq-planet.selected .kq-ring,
+  .kq-burst,
+  .kq-pulse {
+    animation: none;
+  }
+}

@@ -43,4 +43,13 @@ export interface GamePackage {
     /** The built-in bot that `jam check` plays a new bot against: simple and quick. */
     sparring: string;
   };
+  /**
+   * The Phase-1 checks of `npm run research` (Design.md §2), as built-in bot ids: bots that play
+   * themselves for seat balance, and duels of the generic search baseline (first) against
+   * hand-written strategy (second).
+   */
+  research: {
+    balance: readonly string[];
+    versus: readonly (readonly [string, string])[];
+  };
 }

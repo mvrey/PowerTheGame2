@@ -1,4 +1,5 @@
 import type { BotLevel, GameState, Mode, PlayerConfig } from '../api';
+import { readStored as read, removeStored, writeStored as write } from '../../../platform/web/storage';
 import { Lang } from './i18n';
 
 /** Playback speed of a round: 1 normal, 2 fast, 3 very fast. */
@@ -51,22 +52,6 @@ const DEFAULTS: Settings = {
   hints: true,
 };
 
-function read<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-function write(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Storage unavailable (private mode, quota): the game simply does not persist.
-  }
-}
-
 export const settings: Settings = { ...DEFAULTS, ...(read<Partial<Settings>>(SETTINGS_KEY) ?? {}) };
 export const saveSettings = () => write(SETTINGS_KEY, settings);
 
@@ -87,13 +72,7 @@ export function loadGame(): SavedGame | null {
   return { ...save, v: 3 };
 }
 export const saveGame = (save: SavedGame) => write(SAVE_KEY, save);
-export function clearSave(): void {
-  try {
-    localStorage.removeItem(SAVE_KEY);
-  } catch {
-    // Nothing to clear.
-  }
-}
+export const clearSave = () => removeStored(SAVE_KEY);
 
 export const loadSetup = () => migrateSetup(read<Setup>(SETUP_KEY));
 export const saveSetup = (setup: Setup) => write(SETUP_KEY, setup);

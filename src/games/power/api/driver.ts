@@ -4,25 +4,9 @@ import { GameClient, movedPast } from './client';
 import { MatchStatus, SubmitResult } from './match';
 import { OrderProblem, OrderSheet } from './orderSheet';
 import { makeRng, randomSeed } from './random';
+import { abortError, timeSlicer } from '../../../platform/core/botkit';
 
-/**
- * A checkpoint that pauses (with `breathe`) once at least `sliceMs` have gone by since the last
- * pause, and throws once `signal` is aborted.
- */
-export function timeSlicer(sliceMs: number, breathe: () => Promise<void>, signal?: AbortSignal): () => Promise<void> {
-  let since = performance.now();
-  return async () => {
-    if (signal?.aborted) throw abortError(signal);
-    if (performance.now() - since < sliceMs) return;
-    await breathe();
-    if (signal?.aborted) throw abortError(signal);
-    since = performance.now();
-  };
-}
-
-function abortError(signal: AbortSignal): unknown {
-  return signal.reason ?? new Error('Aborted');
-}
+export { timeSlicer };
 
 export interface TurnOptions {
   rng?: Rng;

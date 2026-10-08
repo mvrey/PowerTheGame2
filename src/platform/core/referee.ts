@@ -1,6 +1,6 @@
 import { ActionProblem, GameModule, MatchSetup, PreviousTurn, seatsOf } from './game';
 import { DEFAULT_LIMITS, Limits, PROTOCOL_VERSION, RefereeMessage, asBotMessage } from './protocol';
-import { fingerprint } from './random';
+import { botSeed, fingerprint } from './random';
 import { Failure, REPLAY_FORMAT, REPLAY_VERSION, Replay, ReplayBot, SeatDiagnostics, TurnRecord } from './replay';
 import { actionsOf } from './verify';
 import { PLATFORM_VERSION } from './version';
@@ -162,7 +162,7 @@ export async function runMatch<State, Action, Event>(o: MatchOptions<State, Acti
         maxTurns: setup.maxTurns,
         seat: index,
         players,
-        seed: setup.seed,
+        seed: botSeed(setup.seed, index),
       },
       limits: { startupMs: limits.startupMs, turnMs: limits.turnMs, maxMessageBytes: limits.maxMessageBytes },
       info: game.matchInfo(state, index),

@@ -1,8 +1,9 @@
 # Participant guide
 
 You write a program that plays the edition's game by itself. Bots meet in a tournament
-(`Docs/Tournament.md`), and the best matches are streamed. This edition's game is **Power**:
-read `Docs/Games/Power.md` first.
+(`Docs/Tournament.md`), and the best matches are streamed. Each edition has its game: **Power**
+(edition 1, `Docs/Games/Power.md`) or **Konquest** (edition 2, `Docs/Games/Konquest.md`). Read
+your edition's game first. For Konquest, add `--game konquest` to every `jam` command below.
 
 ## 1. Set up
 
@@ -12,11 +13,11 @@ your bot in Python.
 ```
 git clone <this repository>
 npm install
-npm run jam -- new python bots/mybot        # or: new javascript bots/mybot
+npm run jam -- new python bots/mybot        # or: new javascript bots/mybot   (+ --game konquest)
 ```
 
 `bots/mybot` now holds a working bot: `bot.json` (its name, language and entry file), `main.py`
-(or `main.mjs`), and the helper files `jam.py` + `power.py` (or `.mjs`). Rename the bot in
+(or `main.mjs`), and the helper files `jam.py` + `power.py` or `konquest.py` (or `.mjs`). Rename the bot in
 `bot.json` (1–32 letters, digits, spaces, `. _ -`).
 
 ## 2. Write it

@@ -17,7 +17,9 @@ How to run an edition, from announcement to stream. The commands are run in the 
     payment method, excluded countries).
   - YouTube: streaming rules, and whether the game's original assets (sounds, music) may be broadcast.
     The board game "Power" is a third-party trademark: check whether you may use its name and
-    likeness for a public event.
+    likeness for a public event. Konquest is KDE's (GPL-2.0-or-later): its rules and AIs are
+    ported here with credit; check how to name and credit it, and that the repository's licence
+    fits the GPL if you publish the ported AIs.
   - Privacy: what you publish about participants (names, code), and their consent.
   - Hosting: the VPS provider's terms on running untrusted code, and the cost of the run.
 
@@ -32,7 +34,8 @@ becomes the bot's id in the tournament. Keep the zips.
 
 ## 3. Running the tournament
 
-Write a tournament file (start from `examples/tournament.json`):
+Write a tournament file (start from `examples/tournament.json`, or `examples/konquest-tournament.json`
+for Konquest):
 
 ```json
 {

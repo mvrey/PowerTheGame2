@@ -4,10 +4,11 @@ A platform for **recurring bot-programming competitions**. Participants write pr
 JavaScript, that play a game on their own. The platform runs them in a sandbox, plays a World Cup
 style tournament between them, records verifiable replays, and shows the matches to a live audience.
 Every edition brings a new game. **Edition 1: Power** (1981), a strategy game of simultaneous orders.
+**Edition 2: Konquest**, KDE's game of galactic conquest: fleets in flight, battles with dice.
 
 | I want to… | Read |
 |---|---|
-| write a bot | [Docs/Participants.md](Docs/Participants.md), then [Docs/Games/Power.md](Docs/Games/Power.md) |
+| write a bot | [Docs/Participants.md](Docs/Participants.md), then [Docs/Games/Power.md](Docs/Games/Power.md) or [Docs/Games/Konquest.md](Docs/Games/Konquest.md) |
 | run an edition, or stream it | [Docs/Organizer.md](Docs/Organizer.md) |
 | know the competition rules | [Docs/Tournament.md](Docs/Tournament.md) |
 | talk to the referee from any language | [Docs/Protocol.md](Docs/Protocol.md) |
@@ -26,6 +27,11 @@ npm run jam -- tournament examples/tournament.json            # a whole World Cu
 npm run jam -- help                                           # every command
 ```
 
+Every command takes `--game konquest` for edition 2 (Power is the default), for example
+`npm run jam -- new python bots/kq --game konquest` and
+`npm run jam -- match --game konquest --bot bots/kq --bot builtin:becai`.
+`examples/konquest-tournament.json` is a World Cup of Konquest bots.
+
 Requirements: Node.js 22+, and Python 3.12+ for Python bots. Official matches run in Docker with
 gVisor on Linux ([Docs/Sandbox.md](Docs/Sandbox.md)).
 
@@ -39,22 +45,24 @@ gVisor on Linux ([Docs/Sandbox.md](Docs/Sandbox.md)).
 | **Tournament** | Groups with seat-swapped duels and a free-for-all rotation, then a seeded knockout of series, a third-place match and an exhibition. Resumable and deterministic. |
 | **Viewer** | Tables, bracket, results and any match with a timeline, plus a self-directing broadcast mode for OBS. |
 | **SDKs** | `sdk/python`, `sdk/javascript`: the protocol loop and the game's helpers, standard library only. |
-| **Built-in bots** | Reference opponents: six AI generals at three levels, examples, and a generic Monte Carlo baseline. |
+| **Built-in bots** | Reference opponents. Power: six AI generals at three levels. Konquest: KDE's own AIs (Default and Becai). Both: examples, and a generic Monte Carlo baseline. |
 
 ## Repository
 
 ```
-src/platform/   the game-agnostic platform: core (contracts, referee, replays, tournament), node (runners,
-                sandbox, executor), web (DOM helpers)
-src/games/      the games: power/ (engine, api, built-in bots, jam module, browser game, viewer renderer)
+src/platform/   the game-agnostic platform: core (contracts, referee, replays, tournament, bot kit), node
+                (runners, sandbox, executor), web (DOM helpers, dialogs, storage, texts, base styles)
+src/games/      the games, each with engine, api, built-in bots, jam module, browser game, viewer renderer:
+                power/, konquest/
 src/jam/        the `jam` command          src/viewer/   the spectator viewer
 sdk/  templates/  sandbox/docker/  examples/  tools/research.ts (Phase-1 balance checks)
-tests/          platform/ (referee, runners, adversarial bots, submissions, tournament), power/, architecture
+tests/          platform/ (referee, runners, adversarial bots, submissions, tournament), power/, konquest/,
+                architecture, games (what each game registers)
 Docs/           rules, protocol, sandbox, guides; Docs/Games/<game>.md
 ```
 
 Commands: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format`, `npm run build`
-(the game and the viewer), `npm run jam -- <command>`, `npm run research`.
+(both games and the viewer), `npm run jam -- <command>`, `npm run research [-- --game konquest]`.
 
 ## Edition 1: Power, the browser game
 
@@ -159,3 +167,43 @@ The generals are ordinary bots written against the public API (`src/bots/general
 
 The music was produced by rendering the MIDI files with `js-synthesizer` and the GeneralUser GS
 soundfont and encoding with ffmpeg; `tools/render-midi.cjs` needs both installed separately.
+
+## Edition 2: Konquest, the browser game
+
+KDE's Konquest, with its rules and its AIs, in Spanish or English. Play it against KDE's own
+computer players, or with friends at the same computer (hot seat).
+
+### Play it
+
+- **Double-click `Konquest.bat`**, or open `dist/konquest.html` after `npm run build`.
+  No server and no connection are needed.
+- For development: `npm run dev:konquest`.
+
+#### Controls
+
+| Action | How |
+|---|---|
+| Send a fleet | Click one of your planets, set the ships (box, slider, *Half*, *All*), click the destination |
+| Standing order | Tick *Repeat every turn* before picking the destination |
+| Remove a fleet | ✕ in the list, `Backspace` or `Ctrl+Z` |
+| Planet details, flight time | Hover over a planet |
+| End the turn | Yellow button or `Enter` |
+| Cancel a selection | `Esc` |
+| Skip the animation | `Space` |
+
+#### Game options
+
+- **Galaxy**: small, standard, large, KDE's classic (10 × 10, three neutrals, all at random) or
+  a custom grid (5 to 30 sectors a side, any number of neutral planets). *Fair placement* mirrors
+  or balances the homes; without it, everything is placed at random as in KDE.
+- **Players**: 2 to 10, each human or one of the AIs: KDE Default (Weak, Offensive, Defensive),
+  Becai, Greedy, Rookie, Passive, Monte Carlo. With several humans, the screen is handed over
+  between them every turn.
+- **KDE's rules**: cumulative production, production after conquest, neutral production, and an
+  optional turn limit (KDE has none).
+- **KDE's display options**: blind map (other players' ships and fleets hidden), and whether
+  neutral planets show their ships and their stats.
+
+The game saves itself after every turn. The rules are inside the game, under **How to play**,
+and in [Docs/Games/Konquest.md](Docs/Games/Konquest.md).
+
