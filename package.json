@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && vite build --config vite.viewer.config.ts",
+    "dev:konquest": "vite --open /konquest.html",
+    "build": "tsc --noEmit && vite build && vite build --config vite.konquest.config.ts && vite build --config vite.viewer.config.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

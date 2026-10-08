@@ -42,3 +42,8 @@ export function clear(el: Element): void {
 }
 
 export const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Replaces an element's children, skipping the empty ones (null, false). */
+export function fill(el: Element, ...children: (Node | string | null | undefined | false)[]): void {
+  el.replaceChildren(...children.filter((c): c is Node | string => c !== null && c !== undefined && c !== false));
+}
