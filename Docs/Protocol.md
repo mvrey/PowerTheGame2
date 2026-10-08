@@ -41,7 +41,8 @@ referee waits for all answers (or deadlines) before playing the turn.
 ```
 - `seat` is you. Seats are anonymous: you are never told who your opponents are.
 - `seed` is yours to use for randomness, so that your own play can be replayed. It differs
-  every match, and it reveals nothing secret.
+  every match and every seat, and it reveals nothing secret: it is derived from the match's own
+  seed, which stays with the referee (games with chance, like Konquest, draw their dice from it).
 - `info` depends on the game: see `Docs/Games/<game>.md`.
 
 ### `turn`

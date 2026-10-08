@@ -1,14 +1,24 @@
 /** Random numbers in [0, 1). */
 export type Rng = () => number;
 
+/**
+ * One step of Mulberry32 from a 32-bit state: the number in [0, 1) and the next state. For
+ * games that keep their dice in the (serialisable) game state.
+ */
+export function rngStep(state: number): { value: number; state: number } {
+  const a = (state + 0x6d2b79f5) >>> 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return { value: ((t ^ (t >>> 14)) >>> 0) / 4294967296, state: a };
+}
+
 /** Mulberry32: small, fast, seedable. */
 export function makeRng(seed: number): Rng {
   let a = seed >>> 0;
   return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    const step = rngStep(a);
+    a = step.state;
+    return step.value;
   };
 }
 
@@ -22,6 +32,12 @@ export const randomSeed = (): number => (Date.now() ^ Math.floor(Math.random() *
 export function deriveSeed(seed: number, label: string): number {
   return parseInt(fingerprintText(`${seed >>> 0}:${label}`).slice(0, 8), 16) >>> 0;
 }
+
+/**
+ * The seed a seat's bot gets in `hello`: its own stream, derived from the match seed, so that it
+ * says nothing about the game's chance (a game with dice draws them from the match seed).
+ */
+export const botSeed = (seed: number, seat: number): number => deriveSeed(seed, `bot:${seat}`);
 
 /** Fisher–Yates on a copy. */
 export function shuffled<T>(rng: Rng, items: readonly T[]): T[] {
