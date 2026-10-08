@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { konquestPackage } from '../../src/games/konquest/module';
 import { powerPackage } from '../../src/games/power/module';
 import { GAMES } from '../../src/games';
 import { verifyReplay } from '../../src/platform/core/verify';
@@ -138,5 +139,45 @@ describe('the starter templates', () => {
     expect(replay.turns.map((t) => t.failures[1])).toEqual(replay.turns.map(() => null));
     expect(replay.turns.flatMap((t) => t.problems[1]).filter((p) => p.code === 'budget')).toEqual([]);
     expect(verifyReplay(powerPackage.game, replay).ok).toBe(true);
+  }, 60000);
+
+  it.skipIf(!hasPython)(
+    'the Python Konquest starter plays a whole match over stdio',
+    async () => {
+      const replay = await playSpecs(
+        konquestPackage,
+        new LocalRunner(),
+        ['templates/konquest/python', 'builtin:kde:2'],
+        {
+          format: 'duel',
+          variant: 'small',
+          maxTurns: 8,
+        },
+      );
+      expect(replay.diagnostics[0].ready).toBe(true);
+      expect(replay.turns.map((t) => t.failures[0])).toEqual(replay.turns.map(() => null));
+      expect(replay.turns.some((t) => (t.responses[0] as { orders: unknown[] }).orders.length > 0)).toBe(true);
+      expect(replay.turns.flatMap((t) => t.problems[0])).toEqual([]);
+      expect(verifyReplay(konquestPackage.game, replay).ok).toBe(true);
+    },
+    60000,
+  );
+
+  it('the JavaScript Konquest starter plays a whole match over stdio', async () => {
+    const replay = await playSpecs(
+      konquestPackage,
+      new LocalRunner(),
+      ['builtin:kde:2', 'templates/konquest/javascript'],
+      {
+        format: 'duel',
+        variant: 'standard',
+        maxTurns: 8,
+      },
+    );
+    expect(replay.diagnostics[1].ready).toBe(true);
+    expect(replay.turns.map((t) => t.failures[1])).toEqual(replay.turns.map(() => null));
+    expect(replay.turns.some((t) => (t.responses[1] as { orders: unknown[] }).orders.length > 0)).toBe(true);
+    expect(replay.turns.flatMap((t) => t.problems[1])).toEqual([]);
+    expect(verifyReplay(konquestPackage.game, replay).ok).toBe(true);
   }, 60000);
 });
